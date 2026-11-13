@@ -6,11 +6,9 @@
 import { useState } from 'react';
 import Header from './components/Header';
 import HeroSection from './components/HeroSection';
-import SchoolExplorer from './components/SchoolExplorer';
-import CurriculumGuide from './components/CurriculumGuide';
 import GuidanceView from './components/GuidanceView';
 import Footer from './components/Footer';
-import { SCHOOLS_DATA, School } from './data/schoolsData';
+import type { School } from './data/schoolsData';
 import { generateStudentSessionIds } from './services/consultationSaveService';
 
 export default function App() {
@@ -34,17 +32,6 @@ export default function App() {
     setSelectedSchool(null);
     // Tạo mã học sinh và mã phiếu mới cho phiên tư vấn mới
     setSessionIds(generateStudentSessionIds());
-    setCurrentView('guidance');
-    setGuidanceStep(1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Start guidance from a specific school card on homepage
-  const handleStartGuidanceWithSchool = (school: School) => {
-    setSelectedSchool(school);
-    if (!sessionIds.studentId) {
-      setSessionIds(generateStudentSessionIds());
-    }
     setCurrentView('guidance');
     setGuidanceStep(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -83,26 +70,11 @@ export default function App() {
       {/* Main View Area */}
       <main className="flex-1">
         {currentView === 'home' ? (
-          <>
-            {/* Hero Section with Chatbot "Bạn tên gì?" + "Bắt đầu tư vấn" next to it (No 21 trường / GDPT 2018 stats line) */}
-            <HeroSection
-              studentName={studentName}
-              onStudentNameChange={setStudentName}
-              onStartGuidance={handleStartGuidance}
-            />
-
-            {/* Da Nang High School Explorer Showcase */}
-            <SchoolExplorer
-              selectedSchool={selectedSchool || SCHOOLS_DATA[0]}
-              onSelectSchool={setSelectedSchool}
-              onStartGuidanceWithSchool={handleStartGuidanceWithSchool}
-            />
-
-            {/* GDPT 2018 Curriculum Guide */}
-            <CurriculumGuide
-              onStartGuidance={() => handleNavigateGuidanceStep(1)}
-            />
-          </>
+          <HeroSection
+            studentName={studentName}
+            onStudentNameChange={setStudentName}
+            onStartGuidance={handleStartGuidance}
+          />
         ) : (
           /* Full-width Guidance View (Matching homepage width) */
           <GuidanceView
