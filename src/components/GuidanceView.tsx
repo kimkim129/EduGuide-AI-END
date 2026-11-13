@@ -945,9 +945,9 @@ export default function GuidanceView({
     if (uniApiState === 'loading') {
       return {
         type: 'loading',
-        title: 'Đang tải dữ liệu từ API...',
-        desc: 'Hệ thống đang đồng bộ danh mục chương trình đào tạo từ Google Apps Script...',
-        dropdownLabel: '-- Đang tải danh mục ngành từ API... --',
+        title: 'Đang tải danh mục ngành...',
+        desc: 'Vui lòng chờ trong giây lát trong khi hệ thống chuẩn bị danh mục ngành đào tạo.',
+        dropdownLabel: '-- Đang tải danh mục ngành... --',
       };
     }
     if (uniApiState === 'error' || chuongTrinhList.length === 0) {
@@ -1598,60 +1598,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               </p>
             </div>
 
-            {/* Google Apps Script API Status Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-[13px]">
-              <div className="flex items-center gap-2.5">
-                <span
-                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                    apiState === 'loading'
-                      ? 'bg-amber-500 animate-ping'
-                      : apiState === 'error'
-                      ? 'bg-red-500'
-                      : isUsingApi
-                      ? 'bg-emerald-500'
-                      : 'bg-blue-600'
-                  }`}
-                />
-                <span className="font-semibold text-slate-800">
-                  {apiState === 'loading' ? (
-                    <span className="text-amber-800 font-bold">Đang kết nối API Google Apps Script qua máy chủ trung gian (action=truongTHPT)...</span>
-                  ) : apiState === 'error' ? (
-                    <span className="text-red-800 font-bold">
-                      {apiErrorObj?.errorType === 'AUTH_REQUIRED'
-                        ? 'Yêu cầu xác thực tài khoản Google'
-                        : 'Không thể kết nối API Google Apps Script'}
-                    </span>
-                  ) : isUsingApi ? (
-                    <span className="text-emerald-800 font-bold">Đã nạp dữ liệu từ Google Apps Script API ({schoolsList.length} trường)</span>
-                  ) : (
-                    <span className="text-slate-800">
-                      Cơ sở dữ liệu <strong>{schoolsList.length} trường THPT chính thức</strong> tại TP. Đà Nẵng · Sẵn sàng API Google Apps Script (<code className="font-mono text-blue-800 font-bold">action=truongTHPT</code>)
-                    </span>
-                  )}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowApiModal(!showApiModal)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 font-semibold text-blue-700 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
-                >
-                  <Globe className="w-3.5 h-3.5" />
-                  <span>{isUsingApi ? 'Cấu hình API' : 'Kết nối API Google Apps Script'}</span>
-                </button>
-                {isUsingApi && (
-                  <button
-                    type="button"
-                    onClick={handleUseOfficialList}
-                    className="px-2.5 py-1.5 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-                    title="Dùng lại danh mục 20 trường THPT Đà Nẵng chuẩn"
-                  >
-                    Mặc định
-                  </button>
-                )}
-              </div>
-            </div>
+            {/* Thanh trạng thái kết nối API được ẩn khỏi giao diện học sinh (chỉ hiện cảnh báo khi lỗi ở bên dưới) */}
 
             {/* Google Apps Script API Connection Modal / Expandable Box */}
             {showApiModal && (
@@ -2111,18 +2058,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               </p>
             </div>
 
-            {/* Trạng thái tải câu hỏi từ API Google Apps Script (sheet BO_108_CAU_HOI) */}
-            {hollandApiState === 'loading' && (
-              <div className="p-8 text-center bg-blue-50/50 border border-blue-200 rounded-2xl space-y-3">
-                <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                <h4 className="text-sm font-bold text-blue-950">
-                  Đang kết nối API và tải 108 câu hỏi từ sheet BO_108_CAU_HOI...
-                </h4>
-                <p className="text-xs text-slate-600 max-w-md mx-auto">
-                  Dữ liệu được nạp trực tiếp qua API Google Apps Script trung gian để đảm bảo đúng 108 câu hỏi từ Google Sheets.
-                </p>
-              </div>
-            )}
+            {/* Trạng thái đang tải câu hỏi chạy nền (ẩn thông báo kết nối khỏi giao diện học sinh; chỉ hiện khi xảy ra lỗi) */}
 
             {/* Thông báo lỗi khi không thể tải câu hỏi từ API (Không dùng dữ liệu giả để thay thế) */}
             {hollandApiState === 'error' && (
@@ -2848,7 +2784,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                           Những môn học em yêu thích (Tùy chọn bổ sung)
                         </h3>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
+                      <p className="text-xs font-semibold text-slate-700 mt-1">
                         Chọn các môn học mà bạn yêu thích ở cấp THCS để EduGuide AI kết hợp gợi ý tổ hợp môn lớp 10 phù hợp nhất.
                       </p>
                     </div>
@@ -2982,18 +2918,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               </div>
             )}
 
-            {/* Trạng thái kết nối API Google Apps Script */}
-            {uniApiState === 'loading' && (
-              <div className="p-6 rounded-2xl bg-blue-50/60 border border-blue-200 text-center space-y-3">
-                <RefreshCw className="w-6 h-6 text-blue-600 animate-spin mx-auto" />
-                <div className="text-xs sm:text-sm font-bold text-blue-950">
-                  Đang kết nối API Google Apps Script (?action=tinhThanh, truongDH, chuongTrinh)...
-                </div>
-                <p className="text-xs text-slate-500">
-                  Vui lòng chờ trong giây lát trong khi hệ thống đồng bộ danh mục Tuyển sinh Đại học thực tế.
-                </p>
-              </div>
-            )}
+            {/* Trạng thái đang tải API được ẩn khỏi giao diện học sinh; chỉ hiện thông báo khi xảy ra lỗi */}
 
             {uniApiState === 'error' && (
               <div className="p-5 rounded-2xl bg-amber-50/80 border border-amber-300 text-amber-950 space-y-3">
@@ -3499,31 +3424,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               </div>
             </div>
 
-            {/* THÔNG BÁO TỰ ĐỘNG LƯU KẾT QUẢ TƯ VẤN (CSDL 3 SHEET: KET_QUA_TU_VAN, CHI_TIET_TU_VAN, NGUYEN_VONG_HOC_SINH) */}
-            {autoSaveStatus === 'saving' && (
-              <div className="p-3.5 bg-blue-50/90 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs text-blue-900 shadow-2xs">
-                <div className="flex items-center gap-2.5">
-                  <RefreshCw className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
-                  <span>
-                    <strong>Đang tự động lưu:</strong> Hệ thống đang đóng gói và gửi dữ liệu tư vấn vào CSDL 3 Sheet Google Sheets...
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {autoSaveStatus === 'success' && (
-              <div className="p-3.5 bg-emerald-50/90 border border-emerald-300 rounded-xl flex items-center justify-between gap-3 text-xs text-emerald-950 shadow-2xs">
-                <div className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>
-                    <strong>Đã tự động lưu thành công:</strong> Kết quả tư vấn đã được ghi nhận vào CSDL.
-                  </span>
-                </div>
-                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                  Đã đồng bộ 3 Sheet
-                </span>
-              </div>
-            )}
+            {/* THÔNG BÁO TỰ ĐỘNG LƯU KẾT QUẢ TƯ VẤN: Ẩn hoàn toàn trạng thái đang lưu / lưu thành công khỏi giao diện học sinh; vẫn tự động lưu đầy đủ vào 3 Google Sheets và chỉ hiện cảnh báo + nút Thử lại nếu thất bại */}
 
             {autoSaveStatus === 'not_configured' && (
               <div className="p-4 bg-amber-50/90 border border-amber-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950 shadow-2xs">
@@ -3587,14 +3488,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               </div>
             )}
 
-            {autoSaveStatus === 'skipped' && (
-              <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl flex items-center gap-2.5 text-xs text-slate-700">
-                <Info className="w-4 h-4 text-slate-500 shrink-0" />
-                <span>
-                  Học sinh đã chọn không lưu thông tin vào hệ thống máy chủ. Kết quả tư vấn đang được hiển thị trực tiếp trong phiên này.
-                </span>
-              </div>
-            )}
+
 
             {/* Cảnh báo nạp dữ liệu nếu đang tải */}
             {toHopTHPTLoading && (
