@@ -1,6 +1,8 @@
 /**
- * THUẬT TOÁN TƯ VẤN MÔN THI TỐT NGHIỆP VÀ TỔ HỢP MÔN HỌC THPT
- * PHƯƠNG PHÁP: THỐNG KÊ TẦN SUẤT MÔN HỌC, ƯU TIÊN NGUYỆN VỌNG 1
+ * THUẬT TOÁN TƯ VẤN MÔN THI TỐT NGHIỆP VÀ TỔ HỢP MÔN HỌC THPT – EDUGUIDE AI
+ * PHƯƠNG PHÁP: ĐỐI CHIẾU TỔ HỢP XÉT TUYỂN HOÀN CHỈNH THEO TỪNG NGUYỆN VỌNG
+ * TRỌNG SỐ NGUYỆN VỌNG: NV1 = 3, NV2 = 2, NV3 = 1 (Mỗi nguyện vọng đạt cộng trọng số 1 lần)
+ * KẾT HỢP ĐÁNH GIÁ CẶP 02 MÔN THI TỐT NGHIỆP KHẢ THI VÀ HỖ TRỢ HOLLAND RIASEC
  */
 
 import {
@@ -11,8 +13,9 @@ import {
 import { RiasecKey } from './hollandApiService';
 
 // =========================================================================
-// CẤU HÌNH TRỌNG SỐ ƯU TIÊN NGUYỆN VỌNG (ĐỊNH NGHĨA TẬP TRUNG ĐỂ DỄ ĐIỀU CHỈNH)
-// Điểm ưu tiên = 3 × TanSuatNV1 + 2 × TanSuatNV2 + 1 × TanSuatNV3
+// CẤU HÌNH TRỌNG SỐ ƯU TIÊN NGUYỆN VỌNG
+// Mỗi nguyện vọng được đáp ứng đầy đủ ít nhất 01 tổ hợp xét tuyển hợp lệ
+// sẽ cộng trọng số của nguyện vọng đó MỘT LẦN: NV1 = 3, NV2 = 2, NV3 = 1
 // =========================================================================
 export const WISH_PRIORITY_WEIGHTS: Record<number, number> = {
   1: 3, // Nguyện vọng 1 (Ưu tiên cao nhất)
@@ -45,7 +48,20 @@ export const VALID_GRADUATION_ELECTIVES = new Set<string>([
   'Công nghệ',
 ]);
 
-// Ánh xạ môn học phù hợp với từng nhóm tính cách Holland RIASEC (dùng ở tiêu chí xếp hạng 5)
+// Thứ tự ưu tiên trung tính chỉ dùng khi học sinh chưa có dữ liệu nguyện vọng/sở thích/Holland
+const NEUTRAL_ELECTIVE_ORDER = [
+  'Tiếng Anh',
+  'Lịch sử',
+  'Địa lí',
+  'Hóa học',
+  'Sinh học',
+  'Vật lí',
+  'Tin học',
+  'Giáo dục kinh tế và pháp luật',
+  'Công nghệ',
+];
+
+// Ánh xạ môn học phù hợp với từng nhóm tính cách Holland RIASEC (tiêu chí hỗ trợ, không thay thế điều kiện môn học)
 const HOLLAND_MATCH_MAP: Record<RiasecKey, string[]> = {
   R: ['Vật lí', 'Tin học', 'Công nghệ', 'Hóa học'],
   I: ['Hóa học', 'Sinh học', 'Vật lí', 'Tin học'],
@@ -87,7 +103,14 @@ export function normalizeSubjectName(sub?: string): string {
   }
 
   if (s.includes('lịch sử') || s === 'sử' || s === 'su') return 'Lịch sử';
-  if (s.includes('vật lý') || s.includes('vật lí') || s === 'lý' || s === 'lí' || s === 'ly' || s === 'li') {
+  if (
+    s.includes('vật lý') ||
+    s.includes('vật lí') ||
+    s === 'lý' ||
+    s === 'lí' ||
+    s === 'ly' ||
+    s === 'li'
+  ) {
     return 'Vật lí';
   }
   if (s.includes('hóa') || s.includes('hoá') || s === 'hoa') return 'Hóa học';
@@ -146,6 +169,18 @@ export interface SubjectFrequencyRow {
   combosAppearing: string[];
 }
 
+export interface NonSatisfiedComboItem {
+  code: string;
+  subjects: string[];
+  rawSubjects: string[];
+  missing: string[];
+  matched: string[];
+  notes: string;
+  isPartialMatch: boolean;
+  coveredByTHPTSubjects?: boolean;
+  missingFromTHPT?: string[];
+}
+
 export interface WishComparisonBreakdown {
   wish: UniversityWish;
   order: number;
@@ -159,14 +194,9 @@ export interface WishComparisonBreakdown {
     rawSubjects: string[];
     notes: string;
   }[];
-  partialCombos: {
-    code: string;
-    subjects: string[];
-    rawSubjects: string[];
-    missing: string[];
-    matched: string[];
-    notes: string;
-  }[];
+  partialCombos: NonSatisfiedComboItem[]; // Bao gồm tất cả tổ hợp chưa đạt (sắp xếp ít môn thiếu nhất lên đầu)
+  unmatchedCombos: NonSatisfiedComboItem[]; // Tổ hợp không trùng môn nào trong tập đánh giá
+  thptCoveredComboCodes: string[]; // Tổ hợp xét tuyển có đủ môn học ở bậc THPT (dù 2 môn thi dự kiến không bao phủ hết)
   matchLevel: 'FULL' | 'PARTIAL' | 'NONE';
   matchLabel: string;
 }
@@ -176,14 +206,18 @@ export interface ExamPairEvaluation {
   sub2: string;
   fourSubjects: string[];
   satisfiedWishesCount: number;
+  wishWeightScore: number; // Tổng trọng số NV đạt (3 cho NV1, 2 cho NV2, 1 cho NV3 - mỗi NV tính tối đa 1 lần)
+  maxPossibleWishWeightScore: number;
+  partialOneMissingWishesCount: number;
   supportsNV1: boolean;
   supportsNV2: boolean;
   supportsNV3: boolean;
   allWishesSatisfied: boolean;
   totalSatisfiedCombos: number;
+  preferenceScore: number; // Sở thích THCS + Holland (chỉ dùng phân hạng khi độ phủ nguyện vọng tương đương)
   frequencyPrioritySum: number;
   breakdown: WishComparisonBreakdown[];
-  coverageScore: number; // Dùng để tìm phương án thay thế tối ưu theo độ phủ nguyện vọng
+  coverageScore: number;
 }
 
 export interface EvaluatedTHPTCombination {
@@ -195,21 +229,28 @@ export interface EvaluatedTHPTCombination {
   containsBothProjectedExams: boolean;
   containsProjectedSub1: boolean;
   containsProjectedSub2: boolean;
-  additionalElectives: string[]; // 2 môn lựa chọn bổ sung có điểm ưu tiên cao nhất trong các môn còn lại của tổ hợp
+  additionalElectives: string[]; // 2 môn lựa chọn bổ sung trong tổ hợp (ngoài 2 môn thi dự kiến)
   additionalElectiveDetails: { subject: string; diemUuTien: number; tongTanSuat: number }[];
   top2AdditionalPriorityScore: number;
   allAdditionalPriorityScore: number;
   bestExamPairInCombo: ExamPairEvaluation;
+  thptWishesBreakdown: WishComparisonBreakdown[]; // Đối chiếu tập môn học THPT đến lớp 12 với từng NV
+  thptWishWeightScore: number; // Tổng trọng số NV được đáp ứng đầy đủ về môn học ở THPT (tính 1 lần/NV)
+  thptSupportedWishesOrders: number[]; // Các NV đáp ứng đầy đủ về môn học ở THPT (1, 2, 3)
+  thptUnsatisfiedWishesOrders: number[]; // Các NV chưa đáp ứng đầy đủ về môn học ở THPT
   supportsNV1: boolean;
   supportsNV2: boolean;
   supportsNV3: boolean;
   supportedWishesCount: number;
-  supportedWishesOrders: number[];
+  supportedWishesOrders: number[]; // Các NV đáp ứng đầy đủ bởi cặp 2 môn thi tối ưu + Toán, Văn
+  unsatisfiedWishesOrders: number[]; // Các NV chưa đáp ứng đầy đủ
   totalSatisfiedCombos: number;
   reachableCombosCount: number; // Số tổ hợp xét tuyển nằm gọn trong tập môn học đến lớp 12 của tổ hợp THPT này
   hollandScore: number;
   favoriteScore: number;
   score: number;
+  rankTierLabel: string;
+  rankingReason: string;
   strengths: string[];
   limitations: string[];
 }
@@ -218,30 +259,27 @@ export interface FrequencyConsultationResult {
   wishesAnalysis: WishAnalysisResult[];
   frequencyTable: SubjectFrequencyRow[];
   excludedNonExamSubjects: SubjectFrequencyRow[];
-  projectedPair: [string, string]; // 2 môn thi tốt nghiệp dự kiến theo tần suất
+  projectedPair: [string, string]; // 2 môn thi tốt nghiệp tự chọn tối ưu theo độ phủ tổ hợp xét tuyển & trọng số 3-2-1
   projectedFourSubjects: string[];
   projectedEvaluation: ExamPairEvaluation;
   meetsAllWishesByFrequency: boolean;
   statusTag: 'FULL_MATCH' | 'PARTIAL_MATCH';
   statusBadgeText: string;
   selectionReasonText: string;
-  tiedTopPairs: ExamPairEvaluation[]; // Các phương án đồng hạng theo tần suất
-  higherCoverageAlternatives: ExamPairEvaluation[]; // Các phương án thay thế có độ phủ nguyện vọng cao hơn (nếu phương án tần suất chưa đáp ứng hết)
-  alternativePairs: ExamPairEvaluation[]; // Tổng hợp phương án thay thế cho giao diện
+  examPairLimitationNotice: string | null;
+  tiedTopPairs: ExamPairEvaluation[];
+  higherCoverageAlternatives: ExamPairEvaluation[];
+  alternativePairs: ExamPairEvaluation[];
   evaluatedTHPTCombinations: EvaluatedTHPTCombination[];
   top3THPTCombinations: EvaluatedTHPTCombination[];
   anyTHPTContainsBothProjected: boolean;
   thptFallbackNotice: string | null;
-  activeSupplementaryElectives: string[]; // 2 môn lựa chọn bổ sung (từ tổ hợp THPT tốt nhất hoặc tần suất tiếp theo)
-  nextPriorityCandidates: SubjectFrequencyRow[]; // Danh sách môn có điểm ưu tiên cao tiếp theo (đã loại 2 môn dự kiến)
+  activeSupplementaryElectives: string[];
+  nextPriorityCandidates: SubjectFrequencyRow[];
 }
 
 /**
- * BƯỚC 1: Truy xuất toàn bộ tổ hợp xét tuyển cho từng nguyện vọng (NV1, NV2, NV3)
- * - Khóa: MaTruongTuyenSinh + MaNganh (+ MaCTDT nếu có)
- * - Đọc chính xác MonThi1, MonThi2, MonThi3 (Mon1, Mon2, Mon3, Mon4)
- * - Không lấy dữ liệu ngành của trường khác
- * - Loại bỏ dòng tổ hợp trùng hoàn toàn trong cùng trường, ngành và chương trình
+ * BƯỚC 1: Truy xuất toàn bộ tổ hợp xét tuyển thực tế cho từng nguyện vọng (NV1, NV2, NV3)
  */
 export function extractWishesAdmissionCombos(
   activeWishes: UniversityWish[],
@@ -294,7 +332,7 @@ export function extractWishesAdmissionCombos(
       });
     }
 
-    // Loại bỏ các dòng tổ hợp xét tuyển trùng hoàn toàn trong cùng trường, ngành và chương trình trước khi thống kê
+    // Loại bỏ các dòng tổ hợp xét tuyển trùng hoàn toàn trong cùng trường, ngành và chương trình
     const seenComboKeys = new Set<string>();
     const matchingCombos: ToHopXetTuyenItem[] = [];
 
@@ -379,10 +417,7 @@ export function extractWishesAdmissionCombos(
 }
 
 /**
- * BƯỚC 2 & BƯỚC 3: Thống kê tần suất môn thi và tính điểm ưu tiên 3–2–1
- * - Loại Toán và Ngữ văn khỏi danh sách ứng viên 2 môn thi tự chọn
- * - Chỉ xét các môn thi hợp lệ theo quy chế hiện hành (phân tách riêng nếu có môn năng khiếu)
- * - DiemUuTien = 3 * TanSuatNV1 + 2 * TanSuatNV2 + 1 * TanSuatNV3
+ * Thống kê tham khảo mức độ xuất hiện của từng môn trong các nguyện vọng (chỉ dùng làm thông tin tham khảo/tie-breaker phụ)
  */
 export function computeSubjectFrequencyStats(
   wishesAnalysis: WishAnalysisResult[],
@@ -406,7 +441,6 @@ export function computeSubjectFrequencyStats(
     const order = wa.wishOrder || idx + 1;
     if (order < 1 || order > 3) return;
 
-    // Duyệt qua TỪNG tổ hợp xét tuyển duy nhất của nguyện vọng này
     wa.comboDetails.forEach((cd) => {
       const uniqueSubjectsInCombo = new Set(cd.subjects);
       uniqueSubjectsInCombo.forEach((sub) => {
@@ -455,13 +489,9 @@ export function computeSubjectFrequencyStats(
   });
 
   const sortRows = (a: SubjectFrequencyRow, b: SubjectFrequencyRow) => {
-    // 1. Điểm ưu tiên giảm dần
     if (b.diemUuTien !== a.diemUuTien) return b.diemUuTien - a.diemUuTien;
-    // 2. TanSuatNV1 cao hơn
     if (b.tanSuatNV1 !== a.tanSuatNV1) return b.tanSuatNV1 - a.tanSuatNV1;
-    // 3. TongTanSuat cao hơn
     if (b.tongTanSuat !== a.tongTanSuat) return b.tongTanSuat - a.tongTanSuat;
-    // 4. Ưu tiên nhẹ môn học sinh thích ở THCS nếu hoàn toàn đồng hạng
     const aFav = normFavorites.includes(a.subject) ? 1 : 0;
     const bFav = normFavorites.includes(b.subject) ? 1 : 0;
     if (bFav !== aFav) return bFav - aFav;
@@ -475,20 +505,30 @@ export function computeSubjectFrequencyStats(
 }
 
 /**
- * Đối chiếu một cặp 02 môn thi tự chọn (+ Toán, Ngữ văn) với TỪNG tổ hợp của TỪNG nguyện vọng
+ * Đối chiếu một tập hợp môn học bất kỳ (tập môn học THPT đến lớp 12 HOẶC 4 môn thi tốt nghiệp)
+ * với toàn bộ tổ hợp xét tuyển của từng nguyện vọng.
+ * - Chỉ tính "ĐÁP ỨNG ĐẦY ĐỦ VỀ MÔN HỌC" khi 100% môn thành phần của tổ hợp xét tuyển thuộc tập môn đánh giá.
+ * - Mỗi nguyện vọng chỉ đóng góp trọng số (3/2/1) TỐI ĐA MỘT LẦN nếu có ít nhất 1 tổ hợp đạt.
  */
-export function evaluateExamPairAgainstWishes(
-  sub1: string,
-  sub2: string,
+export function evaluateSubjectSetAgainstWishes(
+  subjectSet: Set<string>,
   wishesAnalysis: WishAnalysisResult[],
-  freqMap: Map<string, SubjectFrequencyRow>
-): ExamPairEvaluation {
-  const s1Norm = normalizeSubjectName(sub1);
-  const s2Norm = normalizeSubjectName(sub2);
-  const fourSubjects = ['Toán', 'Ngữ văn', s1Norm, s2Norm];
-  const examSet = new Set(fourSubjects);
-
+  thptStudiedSet?: Set<string>
+): {
+  breakdown: WishComparisonBreakdown[];
+  satisfiedWishesCount: number;
+  wishWeightScore: number;
+  maxPossibleWishWeightScore: number;
+  partialOneMissingWishesCount: number;
+  supportsNV1: boolean;
+  supportsNV2: boolean;
+  supportsNV3: boolean;
+  totalSatisfiedCombos: number;
+} {
   let satisfiedWishesCount = 0;
+  let wishWeightScore = 0;
+  let maxPossibleWishWeightScore = 0;
+  let partialOneMissingWishesCount = 0;
   let supportsNV1 = false;
   let supportsNV2 = false;
   let supportsNV3 = false;
@@ -496,14 +536,32 @@ export function evaluateExamPairAgainstWishes(
 
   const breakdown: WishComparisonBreakdown[] = wishesAnalysis.map((wa, wIdx) => {
     const order = wa.wishOrder || wIdx + 1;
+    const weight = WISH_PRIORITY_WEIGHTS[order] ?? 0;
+    if (wa.comboDetails.length > 0) {
+      maxPossibleWishWeightScore += weight;
+    }
+
     const satisfiedCombos: WishComparisonBreakdown['satisfiedCombos'] = [];
-    const partialCombos: WishComparisonBreakdown['partialCombos'] = [];
+    const partialCombos: NonSatisfiedComboItem[] = [];
+    const unmatchedCombos: NonSatisfiedComboItem[] = [];
+    const thptCoveredComboCodes: string[] = [];
 
     wa.comboDetails.forEach((cd) => {
-      const missing = cd.subjects.filter((sub) => !examSet.has(sub));
-      const matched = cd.subjects.filter((sub) => examSet.has(sub));
+      const missing = cd.subjects.filter((sub) => !subjectSet.has(sub));
+      const matched = cd.subjects.filter((sub) => subjectSet.has(sub));
 
-      if (missing.length === 0) {
+      const missingFromTHPT = thptStudiedSet
+        ? cd.subjects.filter((sub) => !thptStudiedSet.has(sub))
+        : undefined;
+      const coveredByTHPTSubjects = thptStudiedSet
+        ? (missingFromTHPT?.length ?? 0) === 0
+        : undefined;
+
+      if (coveredByTHPTSubjects && cd.code) {
+        thptCoveredComboCodes.push(cd.code);
+      }
+
+      if (cd.subjects.length > 0 && missing.length === 0) {
         satisfiedCombos.push({
           code: cd.code,
           subjects: cd.subjects,
@@ -511,36 +569,59 @@ export function evaluateExamPairAgainstWishes(
           notes: cd.notes,
         });
       } else {
-        partialCombos.push({
+        const item: NonSatisfiedComboItem = {
           code: cd.code,
           subjects: cd.subjects,
           rawSubjects: cd.rawSubjects,
           missing,
           matched,
           notes: cd.notes,
-        });
+          isPartialMatch: matched.length > 0,
+          coveredByTHPTSubjects,
+          missingFromTHPT,
+        };
+        partialCombos.push(item);
+        if (matched.length === 0) {
+          unmatchedCombos.push(item);
+        }
       }
+    });
+
+    // Sắp xếp tổ hợp chưa đạt: ít môn thiếu nhất (nhiều môn khớp nhất) lên đầu
+    partialCombos.sort((a, b) => {
+      if (a.missing.length !== b.missing.length) return a.missing.length - b.missing.length;
+      return b.matched.length - a.matched.length;
     });
 
     const isSatisfied = satisfiedCombos.length > 0;
     if (isSatisfied) {
       satisfiedWishesCount++;
+      wishWeightScore += weight; // Cộng trọng số nguyện vọng ĐÚNG MỘT LẦN
       if (order === 1) supportsNV1 = true;
       if (order === 2) supportsNV2 = true;
       if (order === 3) supportsNV3 = true;
       totalSatisfiedCombos += satisfiedCombos.length;
+    } else if (partialCombos.some((pc) => pc.missing.length === 1)) {
+      partialOneMissingWishesCount++;
     }
 
+    const hasAnyPartial = partialCombos.some((pc) => pc.matched.length > 0);
     let matchLevel: 'FULL' | 'PARTIAL' | 'NONE' = 'NONE';
-    let matchLabel = 'Chưa đáp ứng đủ môn xét tuyển';
+    let matchLabel =
+      wa.comboDetails.length === 0
+        ? 'Chưa có dữ liệu tổ hợp xét tuyển trong CSDL'
+        : 'Chưa đáp ứng về môn học';
+
     if (isSatisfied) {
       matchLevel = 'FULL';
-      const codes = satisfiedCombos.map((c) => c.code).join(', ');
-      matchLabel = `Đáp ứng đầy đủ (${satisfiedCombos.length} tổ hợp: ${codes})`;
-    } else if (partialCombos.some((pc) => pc.missing.length === 1)) {
+      const codes = satisfiedCombos.map((c) => c.code).filter(Boolean).join(', ');
+      matchLabel = `Đáp ứng đầy đủ về môn học (${satisfiedCombos.length} tổ hợp${codes ? `: ${codes}` : ''})`;
+    } else if (hasAnyPartial) {
       matchLevel = 'PARTIAL';
-      const bestPartial = partialCombos.find((pc) => pc.missing.length === 1);
-      matchLabel = `Đáp ứng 1 phần (${bestPartial?.code} thiếu ${bestPartial?.missing.join(', ')})`;
+      const bestPartial = partialCombos[0];
+      matchLabel = bestPartial
+        ? `Đáp ứng một phần (${bestPartial.code || 'tổ hợp'} thiếu ${bestPartial.missing.join(', ')})`
+        : 'Đáp ứng một phần';
     }
 
     return {
@@ -552,42 +633,203 @@ export function evaluateExamPairAgainstWishes(
       allCombos: wa.comboDetails,
       satisfiedCombos,
       partialCombos,
+      unmatchedCombos,
+      thptCoveredComboCodes,
       matchLevel,
       matchLabel,
     };
   });
 
+  return {
+    breakdown,
+    satisfiedWishesCount,
+    wishWeightScore,
+    maxPossibleWishWeightScore,
+    partialOneMissingWishesCount,
+    supportsNV1,
+    supportsNV2,
+    supportsNV3,
+    totalSatisfiedCombos,
+  };
+}
+
+/**
+ * Đối chiếu một cặp 02 môn thi tự chọn (+ Toán, Ngữ văn) với TỪNG tổ hợp của TỪNG nguyện vọng
+ */
+export function evaluateExamPairAgainstWishes(
+  sub1: string,
+  sub2: string,
+  wishesAnalysis: WishAnalysisResult[],
+  freqMap: Map<string, SubjectFrequencyRow>,
+  options?: {
+    favoriteSubjects?: string[];
+    dominantHollandCode?: RiasecKey;
+    thptStudiedSet?: Set<string>;
+  }
+): ExamPairEvaluation {
+  const s1Norm = normalizeSubjectName(sub1);
+  const s2Norm = normalizeSubjectName(sub2);
+  const fourSubjects = Array.from(new Set(['Toán', 'Ngữ văn', s1Norm, s2Norm].filter(Boolean)));
+  const examSet = new Set(fourSubjects);
+
+  const evalRes = evaluateSubjectSetAgainstWishes(
+    examSet,
+    wishesAnalysis,
+    options?.thptStudiedSet
+  );
+
   const allWishesSatisfied =
-    wishesAnalysis.length > 0 && satisfiedWishesCount === wishesAnalysis.length;
+    wishesAnalysis.length > 0 && evalRes.satisfiedWishesCount === wishesAnalysis.length;
+
+  const normFavs = (options?.favoriteSubjects || []).map(normalizeSubjectName);
+  const hollandSubs = options?.dominantHollandCode
+    ? HOLLAND_MATCH_MAP[options.dominantHollandCode] || []
+    : [];
+
+  let preferenceScore = 0;
+  [s1Norm, s2Norm].forEach((s) => {
+    if (normFavs.includes(s)) preferenceScore += 10;
+    if (hollandSubs.includes(s)) preferenceScore += 5;
+  });
 
   const p1 = freqMap.get(s1Norm)?.diemUuTien || 0;
   const p2 = freqMap.get(s2Norm)?.diemUuTien || 0;
   const frequencyPrioritySum = p1 + p2;
 
-  let coverageScore = satisfiedWishesCount * 1000;
-  if (supportsNV1) coverageScore += 500;
-  if (supportsNV2) coverageScore += 200;
-  if (supportsNV3) coverageScore += 100;
-  coverageScore += totalSatisfiedCombos * 10 + frequencyPrioritySum;
+  const hasNV1 = wishesAnalysis.some((wa, idx) => (wa.wishOrder || idx + 1) === 1 && wa.comboDetails.length > 0);
+
+  // Điểm tổng hợp phản ánh đúng thứ tự ưu tiên:
+  // (1) Hỗ trợ NV1 -> (2) Tổng trọng số NV đạt (3-2-1) -> (3) Số NV đạt -> (4) Số NV thiếu 1 môn -> (5) Số tổ hợp đạt -> (6) Sở thích/Holland
+  const coverageScore =
+    (hasNV1 && evalRes.supportsNV1 ? 1_000_000 : 0) +
+    evalRes.wishWeightScore * 100_000 +
+    evalRes.satisfiedWishesCount * 10_000 +
+    evalRes.partialOneMissingWishesCount * 1_000 +
+    evalRes.totalSatisfiedCombos * 50 +
+    preferenceScore * 5 +
+    Math.min(4, frequencyPrioritySum * 0.05);
 
   return {
     sub1: s1Norm,
     sub2: s2Norm,
     fourSubjects,
-    satisfiedWishesCount,
-    supportsNV1,
-    supportsNV2,
-    supportsNV3,
+    satisfiedWishesCount: evalRes.satisfiedWishesCount,
+    wishWeightScore: evalRes.wishWeightScore,
+    maxPossibleWishWeightScore: evalRes.maxPossibleWishWeightScore,
+    partialOneMissingWishesCount: evalRes.partialOneMissingWishesCount,
+    supportsNV1: evalRes.supportsNV1,
+    supportsNV2: evalRes.supportsNV2,
+    supportsNV3: evalRes.supportsNV3,
     allWishesSatisfied,
-    totalSatisfiedCombos,
+    totalSatisfiedCombos: evalRes.totalSatisfiedCombos,
+    preferenceScore,
     frequencyPrioritySum,
-    breakdown,
+    breakdown: evalRes.breakdown,
     coverageScore,
   };
 }
 
 /**
- * Thuật toán tổng hợp đầy đủ từ Bước 1 đến Bước 8
+ * So sánh 2 phương án cặp môn thi tốt nghiệp theo thứ tự ưu tiên chuẩn:
+ * 1. Đáp ứng NV1
+ * 2. Tổng trọng số NV đạt (NV1=3, NV2=2, NV3=1, mỗi NV tối đa 1 lần)
+ * 3. Số lượng NV đáp ứng đầy đủ
+ * 4. Số NV chỉ thiếu 1 môn (tiêu chí phụ cho phương án gần đạt)
+ * 5. Số tổ hợp xét tuyển đạt được (linh hoạt phương án xét tuyển)
+ * 6. Sở thích THCS & Holland RIASEC
+ * 7. Tổng tần suất tham khảo & thứ tự chữ cái (nhất quán)
+ */
+export function compareExamPairEvaluations(a: ExamPairEvaluation, b: ExamPairEvaluation): number {
+  if (a.supportsNV1 !== b.supportsNV1) return a.supportsNV1 ? -1 : 1;
+  if (b.wishWeightScore !== a.wishWeightScore) return b.wishWeightScore - a.wishWeightScore;
+  if (b.satisfiedWishesCount !== a.satisfiedWishesCount) {
+    return b.satisfiedWishesCount - a.satisfiedWishesCount;
+  }
+  if (b.partialOneMissingWishesCount !== a.partialOneMissingWishesCount) {
+    return b.partialOneMissingWishesCount - a.partialOneMissingWishesCount;
+  }
+  if (b.totalSatisfiedCombos !== a.totalSatisfiedCombos) {
+    return b.totalSatisfiedCombos - a.totalSatisfiedCombos;
+  }
+  if (b.preferenceScore !== a.preferenceScore) {
+    return b.preferenceScore - a.preferenceScore;
+  }
+  if (b.frequencyPrioritySum !== a.frequencyPrioritySum) {
+    return b.frequencyPrioritySum - a.frequencyPrioritySum;
+  }
+  return `${a.sub1}|${a.sub2}`.localeCompare(`${b.sub1}|${b.sub2}`, 'vi');
+}
+
+function buildLimitationNotice(
+  pairEval: ExamPairEvaluation,
+  wishesCount: number
+): string | null {
+  if (wishesCount === 0 || pairEval.allWishesSatisfied) return null;
+
+  const satisfiedList = pairEval.breakdown
+    .filter((b) => b.isSatisfied)
+    .map((b) => `NV${b.order} (${b.satisfiedCombos.map((c) => c.code).join(', ')})`);
+
+  const unsatisfiedList = pairEval.breakdown
+    .filter((b) => !b.isSatisfied)
+    .map((b) => {
+      const bestPartial = b.partialCombos[0];
+      if (!bestPartial) return `NV${b.order} (${b.majorName})`;
+      const thptHint = bestPartial.coveredByTHPTSubjects
+        ? ' — có học ở THPT nhưng không nằm cùng lúc trong 2 môn thi tự chọn'
+        : '';
+      return `NV${b.order} (tổ hợp gần nhất ${bestPartial.code} thiếu ${bestPartial.missing.join(', ')}${thptHint})`;
+    });
+
+  return `Giới hạn phương án thi tốt nghiệp: Do thí sinh chỉ thi 02 môn tự chọn ngoài Toán và Ngữ văn, không có cặp 02 môn thi nào đáp ứng đồng thời toàn bộ ${wishesCount} nguyện vọng. Phương án tối ưu nhất là ${pairEval.sub1} + ${pairEval.sub2} (đạt ${satisfiedList.length > 0 ? satisfiedList.join('; ') : 'chưa đạt NV nào'}; chưa đáp ứng: ${unsatisfiedList.join('; ')}).`;
+}
+
+function buildSelectionReasonText(
+  pairEval: ExamPairEvaluation,
+  wishesCount: number,
+  sourceContext: 'THPT_COMBO' | 'OVERALL',
+  thptComboCode?: string
+): string {
+  const ctxPrefix =
+    sourceContext === 'THPT_COMBO' && thptComboCode
+      ? `Từ tập môn học thực tế đến lớp 12 của tổ hợp ${thptComboCode}, thuật toán đã đối chiếu toàn bộ các cặp 02 môn thi tốt nghiệp tự chọn hợp lệ với tổ hợp xét tuyển của từng nguyện vọng (trọng số NV1 = 3, NV2 = 2, NV3 = 1; mỗi nguyện vọng tính 1 lần).`
+      : `Thuật toán đã đối chiếu toàn bộ các cặp 02 môn thi tốt nghiệp tự chọn hợp lệ với tổ hợp xét tuyển hoàn chỉnh của từng nguyện vọng (trọng số NV1 = 3, NV2 = 2, NV3 = 1; mỗi nguyện vọng tính 1 lần).`;
+
+  const satisfiedWishesDesc = pairEval.breakdown
+    .filter((b) => b.isSatisfied)
+    .map(
+      (b) =>
+        `NV${b.order} (${b.majorName} – ${b.schoolName}) qua ${b.satisfiedCombos
+          .map((c) => c.code)
+          .filter(Boolean)
+          .join(', ')}`
+    )
+    .join('; ');
+
+  const unsatisfiedWishesDesc = pairEval.breakdown
+    .filter((b) => !b.isSatisfied)
+    .map((b) => {
+      const closest = b.partialCombos[0];
+      return closest
+        ? `NV${b.order} (${closest.code} thiếu ${closest.missing.join(', ')})`
+        : `NV${b.order}`;
+    })
+    .join('; ');
+
+  let reason = `${ctxPrefix} Cặp môn thi tối ưu nhất là ${pairEval.sub1} + ${pairEval.sub2} (cùng Toán, Ngữ văn tạo thành 04 môn thi dự kiến; điểm trọng số nguyện vọng: ${pairEval.wishWeightScore}/${pairEval.maxPossibleWishWeightScore || pairEval.wishWeightScore}).`;
+
+  if (satisfiedWishesDesc) {
+    reason += ` Đáp ứng đầy đủ về môn học cho ${pairEval.satisfiedWishesCount}/${wishesCount} nguyện vọng: ${satisfiedWishesDesc}.`;
+  }
+  if (unsatisfiedWishesDesc) {
+    reason += ` Chưa đáp ứng đồng thời ở kỳ thi tốt nghiệp: ${unsatisfiedWishesDesc}.`;
+  }
+  reason += ` Lưu ý: Đây chỉ là đối chiếu môn học giữa môn học THPT, 04 môn thi dự kiến và tổ hợp xét tuyển đại học, không phải xác nhận đủ điều kiện trúng tuyển.`;
+  return reason;
+}
+
+/**
+ * Thuật toán tổng hợp đầy đủ (Bước 1 -> Bước 6)
  */
 export function runFrequencyConsultationAlgorithm(params: {
   activeWishes: UniversityWish[];
@@ -604,10 +846,10 @@ export function runFrequencyConsultationAlgorithm(params: {
     dominantHollandCode,
   } = params;
 
-  // BƯỚC 1: Truy xuất tổ hợp xét tuyển của từng nguyện vọng
+  // BƯỚC 1: Đọc dữ liệu thực tế tổ hợp xét tuyển của từng nguyện vọng
   const wishesAnalysis = extractWishesAdmissionCombos(activeWishes, toHopList);
 
-  // BƯỚC 2 & 3: Thống kê tần suất môn thi & tính điểm ưu tiên 3-2-1
+  // Thống kê phụ trợ môn học theo nguyện vọng
   const { frequencyTable, excludedNonExamSubjects } = computeSubjectFrequencyStats(
     wishesAnalysis,
     favoriteSubjects
@@ -616,160 +858,20 @@ export function runFrequencyConsultationAlgorithm(params: {
   const freqMap = new Map<string, SubjectFrequencyRow>();
   frequencyTable.forEach((row) => freqMap.set(row.subject, row));
 
-  // BƯỚC 4: Chọn 2 môn thi tốt nghiệp dự kiến theo thứ tự xếp hạng Điểm ưu tiên -> NV1 -> Tổng tần suất
   const normFavs = favoriteSubjects.map(normalizeSubjectName);
-  const candidatePool: string[] = frequencyTable.map((r) => r.subject);
-
-  // Nếu dữ liệu tổ hợp xét tuyển chỉ có < 2 môn tự chọn hợp lệ (ví dụ ngành chỉ xét duy nhất D01 - chỉ có Tiếng Anh),
-  // bổ sung môn từ sở thích THCS hoặc các môn quy chế hợp lệ để hoàn thành cặp 02 môn thi tự chọn.
-  if (candidatePool.length < 2) {
-    const fallbackOrder = [
-      ...normFavs.filter(
-        (s) => s !== 'Toán' && s !== 'Ngữ văn' && VALID_GRADUATION_ELECTIVES.has(s)
-      ),
-      'Tiếng Anh',
-      'Lịch sử',
-      'Vật lí',
-      'Hóa học',
-      'Địa lí',
-    ];
-    for (const fb of fallbackOrder) {
-      if (!candidatePool.includes(fb) && candidatePool.length < 2) {
-        candidatePool.push(fb);
-      }
-    }
-  }
-
-  const sub1 = candidatePool[0] || 'Tiếng Anh';
-  const sub2 = candidatePool[1] || 'Vật lí';
-  const projectedPair: [string, string] = [sub1, sub2];
-  const projectedEvaluation = evaluateExamPairAgainstWishes(sub1, sub2, wishesAnalysis, freqMap);
-  const meetsAllWishesByFrequency = projectedEvaluation.allWishesSatisfied;
-
-  // Kiểm tra các phương án đồng hạng (nếu môn thứ 2 bằng Điểm ưu tiên, TanSuatNV1 và TongTanSuat với các môn kế tiếp,
-  // hoặc môn thứ 1 và thứ 2 cùng đồng hạng với môn khác)
-  const tiedTopPairs: ExamPairEvaluation[] = [];
-  const rank1Row = freqMap.get(sub1);
-  const rank2Row = freqMap.get(sub2);
-
-  if (rank1Row && rank2Row) {
-    const topPairScore = rank1Row.diemUuTien + rank2Row.diemUuTien;
-    const seenPairKeys = new Set<string>([[sub1, sub2].sort().join('|')]);
-
-    for (let i = 0; i < frequencyTable.length; i++) {
-      for (let j = i + 1; j < frequencyTable.length; j++) {
-        const rA = frequencyTable[i];
-        const rB = frequencyTable[j];
-        const sumScore = rA.diemUuTien + rB.diemUuTien;
-        // Đồng hạng nếu tổng điểm ưu tiên bằng đúng cặp đứng đầu và có cùng chỉ số NV1/Tổng tần suất tương đương ở vị trí biên
-        const sameNV1 = rA.tanSuatNV1 + rB.tanSuatNV1 === rank1Row.tanSuatNV1 + rank2Row.tanSuatNV1;
-        const sameTotal = rA.tongTanSuat + rB.tongTanSuat === rank1Row.tongTanSuat + rank2Row.tongTanSuat;
-        const pKey = [rA.subject, rB.subject].sort().join('|');
-        if (sumScore === topPairScore && sameNV1 && sameTotal && !seenPairKeys.has(pKey)) {
-          seenPairKeys.add(pKey);
-          tiedTopPairs.push(
-            evaluateExamPairAgainstWishes(rA.subject, rB.subject, wishesAnalysis, freqMap)
-          );
-        }
-      }
-    }
-  }
-
-  // Tìm các phương án cặp môn thay thế có khả năng đáp ứng đầy đủ nhiều nguyện vọng hơn (hoặc giữ NV1 tốt hơn)
-  const allPossibleValidElectives = Array.from(
-    new Set([...candidatePool, ...Array.from(VALID_GRADUATION_ELECTIVES)])
-  );
-  const allCandidatePairsEvals: ExamPairEvaluation[] = [];
-  const seenAllPairKeys = new Set<string>();
-
-  for (let i = 0; i < allPossibleValidElectives.length; i++) {
-    for (let j = i + 1; j < allPossibleValidElectives.length; j++) {
-      const a = allPossibleValidElectives[i];
-      const b = allPossibleValidElectives[j];
-      // Chỉ xét các cặp có ít nhất 1 môn liên quan đến nguyện vọng để tránh nhiễu
-      if (!freqMap.has(a) && !freqMap.has(b)) continue;
-      const key = [a, b].sort().join('|');
-      if (seenAllPairKeys.has(key)) continue;
-      seenAllPairKeys.add(key);
-      allCandidatePairsEvals.push(evaluateExamPairAgainstWishes(a, b, wishesAnalysis, freqMap));
-    }
-  }
-
-  allCandidatePairsEvals.sort((a, b) => b.coverageScore - a.coverageScore);
-
-  const primaryKey = [sub1, sub2].sort().join('|');
-  const higherCoverageAlternatives = allCandidatePairsEvals.filter((pe) => {
-    const key = [pe.sub1, pe.sub2].sort().join('|');
-    if (key === primaryKey) return false;
-    // Có số nguyện vọng đáp ứng nhiều hơn, hoặc đáp ứng NV1 khi phương án chính không đáp ứng NV1
-    if (pe.satisfiedWishesCount > projectedEvaluation.satisfiedWishesCount) return true;
-    if (!projectedEvaluation.supportsNV1 && pe.supportsNV1 && pe.satisfiedWishesCount >= projectedEvaluation.satisfiedWishesCount) {
-      return true;
-    }
-    return false;
-  });
-
-  // Trạng thái chuẩn xác theo Lưu ý Bước 4 & Bước 8
-  const statusTag: 'FULL_MATCH' | 'PARTIAL_MATCH' = meetsAllWishesByFrequency
-    ? 'FULL_MATCH'
-    : 'PARTIAL_MATCH';
-
-  const statusBadgeText = meetsAllWishesByFrequency
-    ? `Đáp ứng đầy đủ cả ${projectedEvaluation.satisfiedWishesCount}/${wishesAnalysis.length} nguyện vọng đã chọn`
-    : `Phù hợp theo tần suất, chưa đáp ứng đầy đủ tổ hợp xét tuyển (${projectedEvaluation.satisfiedWishesCount}/${wishesAnalysis.length} NV đạt)`;
-
-  const r1Str = rank1Row
-    ? `${sub1} (Điểm ưu tiên: ${rank1Row.diemUuTien} = ${WISH_PRIORITY_WEIGHTS[1]}×${rank1Row.tanSuatNV1} + ${WISH_PRIORITY_WEIGHTS[2]}×${rank1Row.tanSuatNV2} + ${WISH_PRIORITY_WEIGHTS[3]}×${rank1Row.tanSuatNV3}; Tổng tần suất: ${rank1Row.tongTanSuat})`
-    : sub1;
-  const r2Str = rank2Row
-    ? `${sub2} (Điểm ưu tiên: ${rank2Row.diemUuTien} = ${WISH_PRIORITY_WEIGHTS[1]}×${rank2Row.tanSuatNV1} + ${WISH_PRIORITY_WEIGHTS[2]}×${rank2Row.tanSuatNV2} + ${WISH_PRIORITY_WEIGHTS[3]}×${rank2Row.tanSuatNV3}; Tổng tần suất: ${rank2Row.tongTanSuat})`
-    : sub2;
-
-  const satisfiedWishesDesc = projectedEvaluation.breakdown
-    .filter((b) => b.isSatisfied)
-    .map((b) => `NV${b.order} (${b.majorName} – ${b.schoolName}) qua ${b.satisfiedCombos.map((c) => c.code).join(', ')}`)
-    .join('; ');
-
-  const unsatisfiedWishesDesc = projectedEvaluation.breakdown
-    .filter((b) => !b.isSatisfied)
-    .map((b) => `NV${b.order} (${b.majorName} – ${b.schoolName})`)
-    .join('; ');
-
-  let selectionReasonText = `Theo thuật toán Thống kê tần suất môn học ưu tiên NV1 (hệ số ${WISH_PRIORITY_WEIGHTS[1]}–${WISH_PRIORITY_WEIGHTS[2]}–${WISH_PRIORITY_WEIGHTS[3]}), hai môn thi tự chọn có điểm ưu tiên cao nhất là ${r1Str} và ${r2Str}.`;
-  if (satisfiedWishesDesc) {
-    selectionReasonText += ` Khi kết hợp với 2 môn bắt buộc (Toán, Ngữ văn), tập hợp 4 môn thi này đáp ứng đầy đủ ${satisfiedWishesDesc}.`;
-  }
-  if (unsatisfiedWishesDesc) {
-    selectionReasonText += ` Lưu ý: Phương án theo tần suất này chưa đáp ứng đầy đủ tổ hợp xét tuyển của ${unsatisfiedWishesDesc} — học sinh nên xem thêm các phương án thay thế bên dưới.`;
-  }
-
-  // Danh sách môn ưu tiên tiếp theo (loại trừ 2 môn thi dự kiến) cho Bước 6
-  const nextPriorityCandidates = frequencyTable.filter(
-    (row) => row.subject !== sub1 && row.subject !== sub2
-  );
-
-  // Tổng hợp các phương án thay thế (ưu tiên phương án đáp ứng nhiều NV hơn nếu cần, sau đó là phương án đồng hạng và phương án kế tiếp có độ phủ tốt)
-  const combinedAlternativesMap = new Map<string, ExamPairEvaluation>();
-  [...higherCoverageAlternatives, ...tiedTopPairs, ...allCandidatePairsEvals].forEach((pe) => {
-    const key = [pe.sub1, pe.sub2].sort().join('|');
-    if (key === primaryKey) return;
-    if (pe.satisfiedWishesCount === 0 && combinedAlternativesMap.size >= 3) return;
-    if (!combinedAlternativesMap.has(key) && combinedAlternativesMap.size < 4) {
-      combinedAlternativesMap.set(key, pe);
-    }
-  });
-  const alternativePairs = Array.from(combinedAlternativesMap.values());
-
-  // BƯỚC 5, 6, 7: Truy xuất tổ hợp THPT thực tế của trường, bổ sung 2 môn lựa chọn còn lại & xếp hạng
   const targetHollandSubjects = HOLLAND_MATCH_MAP[dominantHollandCode] || [];
 
+  // BƯỚC 2, 3, 4: Đánh giá toàn bộ tổ hợp môn học lớp 10 thực tế của trường THPT đã chọn
   const rawEvaluatedTHPT: EvaluatedTHPTCombination[] = validTHPTCombinations
     .filter((item) => {
       const status = (item.trangThai || '').trim().toLowerCase();
-      return !status.includes('ngừng') && !status.includes('hủy') && !status.includes('không áp dụng');
+      return (
+        !status.includes('ngừng') &&
+        !status.includes('hủy') &&
+        !status.includes('không áp dụng')
+      );
     })
     .map((item) => {
-      // Đọc đúng 4 môn lựa chọn của tổ hợp từ Google Sheets (không tính môn bắt buộc hay chuyên đề)
       const electives =
         item.monLuaChon && item.monLuaChon.length > 0
           ? item.monLuaChon.filter(Boolean)
@@ -786,36 +888,75 @@ export function runFrequencyConsultationAlgorithm(params: {
 
       const normElectives = electives.map(normalizeSubjectName);
 
-      // Các môn thực tế học sinh học liên tục đến lớp 12 khi chọn tổ hợp này:
-      // Gồm các môn văn hóa bắt buộc (Toán, Ngữ văn, Tiếng Anh, Lịch sử) + 4 môn lựa chọn của tổ hợp
+      // Tập hợp môn học sinh thực tế được học liên tục đến lớp 12 trong tổ hợp THPT này
       const actualSubjectsToGrade12 = Array.from(
         new Set<string>([...COMPULSORY_THPT_CORE, ...normElectives])
       );
       const grade12Set = new Set(actualSubjectsToGrade12);
 
-      // Bước 5: Kiểm tra tổ hợp THPT có đủ cả 2 môn thi dự kiến học đến lớp 12 hay không
-      const containsProjectedSub1 = grade12Set.has(sub1);
-      const containsProjectedSub2 = grade12Set.has(sub2);
-      const containsBothProjectedExams = containsProjectedSub1 && containsProjectedSub2;
+      // BƯỚC 3 & 4: Đối chiếu tập môn học THPT đến lớp 12 với từng nguyện vọng (trọng số 3-2-1, tính tối đa 1 lần/NV)
+      const thptEval = evaluateSubjectSetAgainstWishes(grade12Set, wishesAnalysis, grade12Set);
+      const thptSupportedWishesOrders = thptEval.breakdown
+        .filter((b) => b.isSatisfied)
+        .map((b) => b.order);
+      const thptUnsatisfiedWishesOrders = thptEval.breakdown
+        .filter((b) => !b.isSatisfied)
+        .map((b) => b.order);
 
-      // Bước 6: Trong 4 môn lựa chọn của tổ hợp THPT thực tế này, loại bỏ 2 môn thi dự kiến (nếu có trong 4 môn),
-      // xếp hạng các môn lựa chọn còn lại theo Điểm ưu tiên -> TanSuatNV1 -> TongTanSuat và lấy 2 môn bổ sung cao nhất
-      const remainingElectives = normElectives.filter((e) => e !== sub1 && e !== sub2);
+      // BƯỚC 5 (trong phạm vi tổ hợp THPT này):
+      // Liệt kê mọi cặp 2 môn thi tốt nghiệp tự chọn hợp lệ từ các môn thực tế được học
+      const eligibleExamsInCombo = actualSubjectsToGrade12.filter(
+        (s) => s !== 'Toán' && s !== 'Ngữ văn' && VALID_GRADUATION_ELECTIVES.has(s)
+      );
+
+      const comboPairEvals: ExamPairEvaluation[] = [];
+      for (let i = 0; i < eligibleExamsInCombo.length; i++) {
+        for (let j = i + 1; j < eligibleExamsInCombo.length; j++) {
+          comboPairEvals.push(
+            evaluateExamPairAgainstWishes(
+              eligibleExamsInCombo[i],
+              eligibleExamsInCombo[j],
+              wishesAnalysis,
+              freqMap,
+              {
+                favoriteSubjects,
+                dominantHollandCode,
+                thptStudiedSet: grade12Set,
+              }
+            )
+          );
+        }
+      }
+      comboPairEvals.sort(compareExamPairEvaluations);
+
+      const bestExamPairInCombo =
+        comboPairEvals[0] ||
+        evaluateExamPairAgainstWishes(
+          eligibleExamsInCombo[0] || 'Tiếng Anh',
+          eligibleExamsInCombo[1] || 'Lịch sử',
+          wishesAnalysis,
+          freqMap,
+          {
+            favoriteSubjects,
+            dominantHollandCode,
+            thptStudiedSet: grade12Set,
+          }
+        );
+
+      // Các môn lựa chọn bổ sung còn lại ngoài 2 môn thi tốt nghiệp tối ưu của tổ hợp
+      const remainingElectives = normElectives.filter(
+        (e) => e !== bestExamPairInCombo.sub1 && e !== bestExamPairInCombo.sub2
+      );
       const sortedRemaining = [...remainingElectives].sort((a, b) => {
         const ra = freqMap.get(a);
         const rb = freqMap.get(b);
         const pa = ra?.diemUuTien || 0;
         const pb = rb?.diemUuTien || 0;
         if (pb !== pa) return pb - pa;
-        const nv1a = ra?.tanSuatNV1 || 0;
-        const nv1b = rb?.tanSuatNV1 || 0;
-        if (nv1b !== nv1a) return nv1b - nv1a;
-        const ta = ra?.tongTanSuat || 0;
-        const tb = rb?.tongTanSuat || 0;
-        if (tb !== ta) return tb - ta;
         const fa = normFavs.includes(a) ? 1 : 0;
         const fb = normFavs.includes(b) ? 1 : 0;
-        return fb - fa;
+        if (fb !== fa) return fb - fa;
+        return a.localeCompare(b, 'vi');
       });
 
       const additionalElectives = sortedRemaining.slice(0, 2);
@@ -834,52 +975,7 @@ export function runFrequencyConsultationAlgorithm(params: {
         0
       );
 
-      // Đếm tổng số tổ hợp xét tuyển của các nguyện vọng nằm gọn trong các môn học đến lớp 12 của tổ hợp THPT này
-      let reachableCombosCount = 0;
-      wishesAnalysis.forEach((wa) => {
-        wa.comboDetails.forEach((cd) => {
-          if (cd.subjects.every((s) => grade12Set.has(s))) {
-            reachableCombosCount++;
-          }
-        });
-      });
-
-      // Nếu tổ hợp THPT chứa cả 2 môn thi dự kiến thì đánh giá chính cặp dự kiến;
-      // nếu không chứa đủ, tìm cặp môn thi tốt nghiệp hợp lệ tốt nhất có thể thi từ các môn của tổ hợp THPT này
-      let bestExamPairInCombo: ExamPairEvaluation = projectedEvaluation;
-      if (!containsBothProjectedExams) {
-        const eligibleExams = actualSubjectsToGrade12.filter(
-          (s) => s !== 'Toán' && s !== 'Ngữ văn' && VALID_GRADUATION_ELECTIVES.has(s)
-        );
-        let bestLocal: ExamPairEvaluation | null = null;
-        for (let i = 0; i < eligibleExams.length; i++) {
-          for (let j = i + 1; j < eligibleExams.length; j++) {
-            const pe = evaluateExamPairAgainstWishes(
-              eligibleExams[i],
-              eligibleExams[j],
-              wishesAnalysis,
-              freqMap
-            );
-            if (!bestLocal || pe.coverageScore > bestLocal.coverageScore) {
-              bestLocal = pe;
-            }
-          }
-        }
-        if (bestLocal) bestExamPairInCombo = bestLocal;
-      }
-
-      const supportsNV1 = bestExamPairInCombo.supportsNV1;
-      const supportsNV2 = bestExamPairInCombo.supportsNV2;
-      const supportsNV3 = bestExamPairInCombo.supportsNV3;
-      const supportedWishesCount = bestExamPairInCombo.satisfiedWishesCount;
-      const totalSatisfiedCombos = bestExamPairInCombo.totalSatisfiedCombos;
-
-      const supportedWishesOrders: number[] = [];
-      if (supportsNV1) supportedWishesOrders.push(1);
-      if (supportsNV2) supportedWishesOrders.push(2);
-      if (supportsNV3) supportedWishesOrders.push(3);
-
-      // Tiêu chí 5: Sở thích THCS & Holland RIASEC
+      // Tiêu chí hỗ trợ: Sở thích THCS & Holland RIASEC (không thay thế điều kiện môn học)
       const favoriteMatched = normElectives.filter((e) => normFavs.includes(e));
       const favoriteScore = Math.min(20, favoriteMatched.length * 5);
 
@@ -893,39 +989,60 @@ export function runFrequencyConsultationAlgorithm(params: {
           ? 4
           : 0;
 
+      const supportedWishesOrders = bestExamPairInCombo.breakdown
+        .filter((b) => b.isSatisfied)
+        .map((b) => b.order);
+      const unsatisfiedWishesOrders = bestExamPairInCombo.breakdown
+        .filter((b) => !b.isSatisfied)
+        .map((b) => b.order);
+
+      const maxWeight = thptEval.maxPossibleWishWeightScore || 6;
+      const thptWeightRatio = maxWeight > 0 ? thptEval.wishWeightScore / maxWeight : 0;
+      const examWeightRatio = maxWeight > 0 ? bestExamPairInCombo.wishWeightScore / maxWeight : 0;
       const totalScore = Math.min(
         100,
-        (containsBothProjectedExams ? 50 : 20) +
-          Math.min(25, top2AdditionalPriorityScore * 2) +
-          (supportsNV1 ? 15 : 0) +
-          Math.min(10, hollandScore + favoriteScore / 4)
+        Math.round(
+          (thptEval.supportsNV1 ? 25 : 0) +
+            thptWeightRatio * 35 +
+            examWeightRatio * 25 +
+            Math.min(15, hollandScore + favoriteScore / 4)
+        )
       );
 
       const strengths: string[] = [];
       const limitations: string[] = [];
 
-      if (containsBothProjectedExams) {
+      if (thptSupportedWishesOrders.length > 0) {
         strengths.push(
-          `Đảm bảo học liên tục đến lớp 12 đủ cả 02 môn thi dự kiến (${sub1} & ${sub2}).`
+          `Môn học THPT đáp ứng đầy đủ ${thptSupportedWishesOrders.map((o) => `NV${o}`).join(', ')} (${thptEval.wishWeightScore}/${maxWeight}đ trọng số).`
         );
       } else {
+        limitations.push('Chưa đáp ứng đầy đủ môn học cho các tổ hợp xét tuyển đã chọn.');
+      }
+
+      strengths.push(
+        `Cặp môn thi tốt nghiệp tối ưu trong tổ hợp: ${bestExamPairInCombo.sub1} + ${bestExamPairInCombo.sub2} (đạt ${bestExamPairInCombo.satisfiedWishesCount}/${wishesAnalysis.length} NV).`
+      );
+
+      if (thptUnsatisfiedWishesOrders.length > 0) {
         limitations.push(
-          `Không bao gồm đầy đủ cả 02 môn thi dự kiến (${sub1}, ${sub2}); phương án thi phù hợp nhất với tổ hợp này là ${bestExamPairInCombo.sub1} + ${bestExamPairInCombo.sub2}.`
+          `Chưa đáp ứng về môn học THPT: ${thptUnsatisfiedWishesOrders.map((o) => `NV${o}`).join(', ')}.`
+        );
+      } else if (unsatisfiedWishesOrders.length > 0) {
+        limitations.push(
+          `Có đủ môn học ở THPT, nhưng 2 môn thi tốt nghiệp tự chọn chỉ bao phủ đồng thời ${supportedWishesOrders.map((o) => `NV${o}`).join(', ') || '0 NV'}.`
         );
       }
 
-      if (additionalElectiveDetails.some((d) => d.diemUuTien > 0)) {
-        const highSubs = additionalElectiveDetails
-          .filter((d) => d.diemUuTien > 0)
-          .map((d) => `${d.subject} (${d.diemUuTien}đ)`)
-          .join(', ');
-        strengths.push(`Bổ sung môn lựa chọn ưu tiên cao: ${highSubs}.`);
-      }
-
-      if (supportsNV1) {
-        strengths.push('Đáp ứng đầy đủ ít nhất 01 tổ hợp xét tuyển của Nguyện vọng 1.');
-      } else {
-        limitations.push('Chưa đáp ứng trực tiếp tổ hợp xét tuyển của Nguyện vọng 1.');
+      if (hollandMatched.length > 0 || favoriteMatched.length > 0) {
+        const fitParts: string[] = [];
+        if (hollandMatched.length > 0) {
+          fitParts.push(`khớp nhóm Holland ${dominantHollandCode} (${hollandMatched.join(', ')})`);
+        }
+        if (favoriteMatched.length > 0) {
+          fitParts.push(`${favoriteMatched.length} môn yêu thích THCS (${favoriteMatched.join(', ')})`);
+        }
+        strengths.push(`Tiêu chí hỗ trợ: ${fitParts.join('; ')}.`);
       }
 
       return {
@@ -934,95 +1051,280 @@ export function runFrequencyConsultationAlgorithm(params: {
         topics,
         normElectives,
         actualSubjectsToGrade12,
-        containsBothProjectedExams,
-        containsProjectedSub1,
-        containsProjectedSub2,
+        containsBothProjectedExams: true,
+        containsProjectedSub1: true,
+        containsProjectedSub2: true,
         additionalElectives,
         additionalElectiveDetails,
         top2AdditionalPriorityScore,
         allAdditionalPriorityScore,
         bestExamPairInCombo,
-        supportsNV1,
-        supportsNV2,
-        supportsNV3,
-        supportedWishesCount,
-        supportedWishesOrders,
-        totalSatisfiedCombos,
-        reachableCombosCount,
+        thptWishesBreakdown: thptEval.breakdown,
+        thptWishWeightScore: thptEval.wishWeightScore,
+        thptSupportedWishesOrders,
+        thptUnsatisfiedWishesOrders,
+        supportsNV1: thptEval.supportsNV1,
+        supportsNV2: thptEval.supportsNV2,
+        supportsNV3: thptEval.supportsNV3,
+        supportedWishesCount: thptSupportedWishesOrders.length,
+        supportedWishesOrders: thptSupportedWishesOrders,
+        unsatisfiedWishesOrders: thptUnsatisfiedWishesOrders,
+        totalSatisfiedCombos: thptEval.totalSatisfiedCombos,
+        reachableCombosCount: thptEval.totalSatisfiedCombos,
         hollandScore,
         favoriteScore,
         score: totalScore,
+        rankTierLabel: '',
+        rankingReason: '',
         strengths,
         limitations,
       };
     });
 
-  // BƯỚC 7: Xếp hạng tổ hợp THPT theo đúng 5 thứ tự ưu tiên
-  const evaluatedTHPTCombinations = [...rawEvaluatedTHPT].sort((a, b) => {
-    // 1. Tổ hợp THPT thực tế, hợp lệ (đã lọc)
-    // 2. Có đủ 2 môn thi tốt nghiệp dự kiến
-    if (a.containsBothProjectedExams !== b.containsBothProjectedExams) {
-      return a.containsBothProjectedExams ? -1 : 1;
+  // BƯỚC 4 & BƯỚC 6: Xếp hạng tổ hợp THPT theo đúng thứ tự ưu tiên:
+  // 1. Đáp ứng đầy đủ NV1 (về môn học THPT)
+  // 2. Tổng điểm đáp ứng nguyện vọng (trọng số NV1=3, NV2=2, NV3=1; mỗi NV tính 1 lần)
+  // 3. Số lượng nguyện vọng được đáp ứng đầy đủ (ở bậc THPT)
+  // 4. Khả năng sử dụng cặp 2 môn thi tốt nghiệp tối ưu trong tổ hợp đó (NV1 -> trọng số -> số NV đạt -> số tổ hợp đạt)
+  // 5. Mức độ phù hợp Holland & sở thích THCS (chỉ là tiêu chí hỗ trợ)
+  // 6. Tiêu chí phụ nhất quán (tổng số tổ hợp xét tuyển đạt, điểm ưu tiên bổ sung, mã tổ hợp)
+  const sortedEvaluatedTHPT = [...rawEvaluatedTHPT].sort((a, b) => {
+    if (a.supportsNV1 !== b.supportsNV1) {
+      return a.supportsNV1 ? -1 : 1;
     }
-
-    // Nếu cả 2 đều chứa đủ 2 môn thi dự kiến -> xếp theo:
-    // 3. Hai môn lựa chọn còn lại có tổng điểm ưu tiên cao nhất
-    // 4. Đáp ứng đầy đủ nhiều tổ hợp xét tuyển và nguyện vọng hơn
-    // 5. Phù hợp với sở thích, kết quả Holland của học sinh
-    if (a.containsBothProjectedExams && b.containsBothProjectedExams) {
-      if (b.top2AdditionalPriorityScore !== a.top2AdditionalPriorityScore) {
-        return b.top2AdditionalPriorityScore - a.top2AdditionalPriorityScore;
-      }
-      if (b.allAdditionalPriorityScore !== a.allAdditionalPriorityScore) {
-        return b.allAdditionalPriorityScore - a.allAdditionalPriorityScore;
-      }
-      if (a.supportsNV1 !== b.supportsNV1) {
-        return a.supportsNV1 ? -1 : 1;
-      }
-      if (b.supportedWishesCount !== a.supportedWishesCount) {
-        return b.supportedWishesCount - a.supportedWishesCount;
-      }
-      if (b.reachableCombosCount !== a.reachableCombosCount) {
-        return b.reachableCombosCount - a.reachableCombosCount;
-      }
-      if (b.totalSatisfiedCombos !== a.totalSatisfiedCombos) {
-        return b.totalSatisfiedCombos - a.totalSatisfiedCombos;
-      }
-    } else {
-      // Trường hợp fallback (không có tổ hợp chứa đủ cả 2 môn dự kiến): ưu tiên phương án thực tế đáp ứng được NV1 & nhiều NV nhất
-      if (a.supportsNV1 !== b.supportsNV1) {
-        return a.supportsNV1 ? -1 : 1;
-      }
-      if (b.supportedWishesCount !== a.supportedWishesCount) {
-        return b.supportedWishesCount - a.supportedWishesCount;
-      }
-      if (b.top2AdditionalPriorityScore !== a.top2AdditionalPriorityScore) {
-        return b.top2AdditionalPriorityScore - a.top2AdditionalPriorityScore;
-      }
-      if (b.reachableCombosCount !== a.reachableCombosCount) {
-        return b.reachableCombosCount - a.reachableCombosCount;
-      }
+    if (b.thptWishWeightScore !== a.thptWishWeightScore) {
+      return b.thptWishWeightScore - a.thptWishWeightScore;
     }
+    if (b.supportedWishesCount !== a.supportedWishesCount) {
+      return b.supportedWishesCount - a.supportedWishesCount;
+    }
+    const examPairCmp = compareExamPairEvaluations(
+      a.bestExamPairInCombo,
+      b.bestExamPairInCombo
+    );
+    if (examPairCmp !== 0) return examPairCmp;
 
-    // 5. Phù hợp với sở thích, kết quả Holland của học sinh
     const aFit = a.hollandScore + a.favoriteScore;
     const bFit = b.hollandScore + b.favoriteScore;
     if (bFit !== aFit) return bFit - aFit;
 
-    return b.score - a.score;
+    if (b.reachableCombosCount !== a.reachableCombosCount) {
+      return b.reachableCombosCount - a.reachableCombosCount;
+    }
+    if (b.top2AdditionalPriorityScore !== a.top2AdditionalPriorityScore) {
+      return b.top2AdditionalPriorityScore - a.top2AdditionalPriorityScore;
+    }
+    return (a.comb.maToHopTHPT || '').localeCompare(b.comb.maToHopTHPT || '', 'vi');
   });
 
-  // Hiển thị tối đa 3 tổ hợp THPT được đề xuất
+  // Chọn cặp 2 môn thi tốt nghiệp dự kiến tổng thể (từ Top 1 tổ hợp THPT nếu có, hoặc đánh giá toàn bộ cặp môn hợp lệ nếu trường chưa có TO_HOP_THPT)
+  let projectedEvaluation: ExamPairEvaluation;
+  let allCandidatePairsEvals: ExamPairEvaluation[] = [];
+
+  if (sortedEvaluatedTHPT.length > 0) {
+    const top1 = sortedEvaluatedTHPT[0];
+    projectedEvaluation = top1.bestExamPairInCombo;
+
+    // Tổng hợp các cặp môn khả thi trong Top 1 để so sánh phương án thay thế
+    const top1Eligible = top1.actualSubjectsToGrade12.filter(
+      (s) => s !== 'Toán' && s !== 'Ngữ văn' && VALID_GRADUATION_ELECTIVES.has(s)
+    );
+    const grade12SetTop1 = new Set(top1.actualSubjectsToGrade12);
+    for (let i = 0; i < top1Eligible.length; i++) {
+      for (let j = i + 1; j < top1Eligible.length; j++) {
+        allCandidatePairsEvals.push(
+          evaluateExamPairAgainstWishes(
+            top1Eligible[i],
+            top1Eligible[j],
+            wishesAnalysis,
+            freqMap,
+            {
+              favoriteSubjects,
+              dominantHollandCode,
+              thptStudiedSet: grade12SetTop1,
+            }
+          )
+        );
+      }
+    }
+    allCandidatePairsEvals.sort(compareExamPairEvaluations);
+  } else {
+    // Trường hợp trường THPT chưa có danh sách TO_HOP_THPT: xét mọi cặp môn tự chọn hợp lệ xuất hiện trong NV + sở thích + Holland
+    const fallbackCandidates = Array.from(
+      new Set([
+        ...frequencyTable.map((r) => r.subject),
+        ...normFavs.filter(
+          (s) => s !== 'Toán' && s !== 'Ngữ văn' && VALID_GRADUATION_ELECTIVES.has(s)
+        ),
+        ...targetHollandSubjects.filter(
+          (s) => s !== 'Toán' && s !== 'Ngữ văn' && VALID_GRADUATION_ELECTIVES.has(s)
+        ),
+        ...NEUTRAL_ELECTIVE_ORDER,
+      ])
+    ).filter((s) => s !== 'Toán' && s !== 'Ngữ văn' && VALID_GRADUATION_ELECTIVES.has(s));
+
+    const seenKeys = new Set<string>();
+    for (let i = 0; i < fallbackCandidates.length; i++) {
+      for (let j = i + 1; j < fallbackCandidates.length; j++) {
+        const a = fallbackCandidates[i];
+        const b = fallbackCandidates[j];
+        if (frequencyTable.length > 0 && !freqMap.has(a) && !freqMap.has(b)) continue;
+        const key = [a, b].sort().join('|');
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        allCandidatePairsEvals.push(
+          evaluateExamPairAgainstWishes(a, b, wishesAnalysis, freqMap, {
+            favoriteSubjects,
+            dominantHollandCode,
+          })
+        );
+      }
+    }
+    allCandidatePairsEvals.sort(compareExamPairEvaluations);
+    projectedEvaluation =
+      allCandidatePairsEvals[0] ||
+      evaluateExamPairAgainstWishes(
+        fallbackCandidates[0] || 'Tiếng Anh',
+        fallbackCandidates[1] || 'Lịch sử',
+        wishesAnalysis,
+        freqMap,
+        { favoriteSubjects, dominantHollandCode }
+      );
+  }
+
+  const sub1 = projectedEvaluation.sub1;
+  const sub2 = projectedEvaluation.sub2;
+  const projectedPair: [string, string] = [sub1, sub2];
+  const meetsAllWishesByFrequency = projectedEvaluation.allWishesSatisfied;
+  const primaryKey = [sub1, sub2].sort().join('|');
+
+  // Cập nhật nhãn xếp hạng, lý do xếp hạng và đối chiếu với cặp môn thi dự kiến tổng thể cho từng tổ hợp THPT
+  const evaluatedTHPTCombinations: EvaluatedTHPTCombination[] = sortedEvaluatedTHPT.map(
+    (entry, idx) => {
+      const grade12Set = new Set(entry.actualSubjectsToGrade12);
+      const containsProjectedSub1 = grade12Set.has(sub1);
+      const containsProjectedSub2 = grade12Set.has(sub2);
+      const containsBothProjectedExams = containsProjectedSub1 && containsProjectedSub2;
+
+      const rankTierLabel =
+        idx === 0
+          ? 'Top 1: Phù hợp nhất'
+          : idx === 1
+          ? 'Top 2: Phương án thay thế'
+          : idx === 2
+          ? 'Top 3: Phương án dự phòng'
+          : `Phương án ${idx + 1}`;
+
+      const maxWeight =
+        entry.bestExamPairInCombo.maxPossibleWishWeightScore ||
+        wishesAnalysis.reduce((s, wa, wIdx) => {
+          const order = wa.wishOrder || wIdx + 1;
+          return wa.comboDetails.length > 0 ? s + (WISH_PRIORITY_WEIGHTS[order] ?? 0) : s;
+        }, 0);
+
+      const satWishesText =
+        entry.thptSupportedWishesOrders.length > 0
+          ? entry.thptSupportedWishesOrders.map((o) => `NV${o}`).join(', ')
+          : 'chưa có';
+
+      const examSatText =
+        entry.bestExamPairInCombo.satisfiedWishesCount > 0
+          ? entry.bestExamPairInCombo.breakdown
+              .filter((b) => b.isSatisfied)
+              .map((b) => `NV${b.order} (${b.satisfiedCombos.map((c) => c.code).join(', ')})`)
+              .join('; ')
+          : 'chưa đạt trực tiếp';
+
+      const favMatched = entry.normElectives.filter((e) => normFavs.includes(e));
+      const holMatched = entry.normElectives.filter((e) => targetHollandSubjects.includes(e));
+      const fitParts: string[] = [];
+      if (holMatched.length > 0) fitParts.push(`phù hợp Holland ${dominantHollandCode} (${holMatched.length} môn)`);
+      if (favMatched.length > 0) fitParts.push(`${favMatched.length} môn yêu thích THCS`);
+      const fitNote = fitParts.length > 0 ? ` Hỗ trợ: ${fitParts.join(', ')}.` : '';
+
+      const rankingReason =
+        `Đáp ứng môn học THPT cho ${satWishesText} (${entry.thptWishWeightScore}/${maxWeight || entry.thptWishWeightScore}đ trọng số). Cặp thi tốt nghiệp tối ưu ${entry.bestExamPairInCombo.sub1} + ${entry.bestExamPairInCombo.sub2} hỗ trợ ${examSatText}.${fitNote}`.trim();
+
+      return {
+        ...entry,
+        containsProjectedSub1,
+        containsProjectedSub2,
+        containsBothProjectedExams,
+        rankTierLabel,
+        rankingReason,
+      };
+    }
+  );
+
   const top3THPTCombinations = evaluatedTHPTCombinations.slice(0, 3);
   const anyTHPTContainsBothProjected = evaluatedTHPTCombinations.some(
     (c) => c.containsBothProjectedExams
   );
 
+  // Kiểm tra các phương án đồng hạng & phương án thay thế
+  const tiedTopPairs = allCandidatePairsEvals.filter((pe) => {
+    const key = [pe.sub1, pe.sub2].sort().join('|');
+    if (key === primaryKey) return false;
+    return (
+      pe.supportsNV1 === projectedEvaluation.supportsNV1 &&
+      pe.wishWeightScore === projectedEvaluation.wishWeightScore &&
+      pe.satisfiedWishesCount === projectedEvaluation.satisfiedWishesCount
+    );
+  });
+
+  const higherCoverageAlternatives = allCandidatePairsEvals.filter((pe) => {
+    const key = [pe.sub1, pe.sub2].sort().join('|');
+    if (key === primaryKey) return false;
+    if (pe.satisfiedWishesCount > projectedEvaluation.satisfiedWishesCount) return true;
+    if (!projectedEvaluation.supportsNV1 && pe.supportsNV1) return true;
+    return false;
+  });
+
+  const combinedAlternativesMap = new Map<string, ExamPairEvaluation>();
+  [...higherCoverageAlternatives, ...tiedTopPairs, ...allCandidatePairsEvals].forEach((pe) => {
+    const key = [pe.sub1, pe.sub2].sort().join('|');
+    if (key === primaryKey) return;
+    if (!combinedAlternativesMap.has(key) && combinedAlternativesMap.size < 4) {
+      combinedAlternativesMap.set(key, pe);
+    }
+  });
+  const alternativePairs = Array.from(combinedAlternativesMap.values());
+
+  const statusTag: 'FULL_MATCH' | 'PARTIAL_MATCH' = meetsAllWishesByFrequency
+    ? 'FULL_MATCH'
+    : 'PARTIAL_MATCH';
+
+  const statusBadgeText = meetsAllWishesByFrequency
+    ? `Đáp ứng đầy đủ về môn học ${projectedEvaluation.satisfiedWishesCount}/${wishesAnalysis.length} nguyện vọng`
+    : `Phương án tối ưu nhất hiện có (đạt ${projectedEvaluation.satisfiedWishesCount}/${wishesAnalysis.length} nguyện vọng)`;
+
+  const top1Code = evaluatedTHPTCombinations[0]?.comb.maToHopTHPT;
+  const selectionReasonText = buildSelectionReasonText(
+    projectedEvaluation,
+    wishesAnalysis.length,
+    evaluatedTHPTCombinations.length > 0 ? 'THPT_COMBO' : 'OVERALL',
+    top1Code
+  );
+  const examPairLimitationNotice = buildLimitationNotice(
+    projectedEvaluation,
+    wishesAnalysis.length
+  );
+
   let thptFallbackNotice: string | null = null;
-  if (evaluatedTHPTCombinations.length > 0 && !anyTHPTContainsBothProjected) {
-    const topFallback = evaluatedTHPTCombinations[0];
-    thptFallbackNotice = `Lưu ý: Trường THPT đã chọn hiện không có tổ hợp môn học lớp 10 nào bao gồm đầy đủ cả 2 môn thi dự kiến (${sub1} và ${sub2}) đến lớp 12. Hệ thống đã tự động tìm phương án tổ hợp thực tế khả thi nhất tại trường là ${topFallback.comb.maToHopTHPT} (${topFallback.electives.join(', ')}) kết hợp cặp môn thi thay thế ${topFallback.bestExamPairInCombo.sub1} + ${topFallback.bestExamPairInCombo.sub2}.`;
+  if (
+    evaluatedTHPTCombinations.length > 0 &&
+    !evaluatedTHPTCombinations[0].bestExamPairInCombo.allWishesSatisfied &&
+    wishesAnalysis.length > 0
+  ) {
+    const top1 = evaluatedTHPTCombinations[0];
+    if (top1.thptSupportedWishesOrders.length > top1.bestExamPairInCombo.satisfiedWishesCount) {
+      thptFallbackNotice = `Lưu ý: Tổ hợp ${top1.comb.maToHopTHPT} có đủ môn học THPT cho ${top1.thptSupportedWishesOrders.map((o) => `NV${o}`).join(', ')}, nhưng do kỳ thi tốt nghiệp chỉ chọn 02 môn tự chọn nên cặp thi tối ưu (${top1.bestExamPairInCombo.sub1} + ${top1.bestExamPairInCombo.sub2}) đáp ứng đồng thời ${top1.bestExamPairInCombo.satisfiedWishesCount}/${wishesAnalysis.length} nguyện vọng.`;
+    }
   }
+
+  const nextPriorityCandidates = frequencyTable.filter(
+    (row) => row.subject !== sub1 && row.subject !== sub2
+  );
 
   const activeSupplementaryElectives =
     top3THPTCombinations[0]?.additionalElectives ||
@@ -1039,6 +1341,7 @@ export function runFrequencyConsultationAlgorithm(params: {
     statusTag,
     statusBadgeText,
     selectionReasonText,
+    examPairLimitationNotice,
     tiedTopPairs,
     higherCoverageAlternatives,
     alternativePairs,

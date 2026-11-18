@@ -341,13 +341,35 @@ export default function GuidanceView({
   const [favoriteSubjects, setFavoriteSubjects] = useState<string[]>([]);
   const [pageWarning, setPageWarning] = useState<number | null>(null);
   const testContainerRef = useRef<HTMLDivElement>(null);
+  const prevHollandStepRef = useRef<'intro' | 'test' | 'result'>(hollandStep);
 
-  // Tự động cuộn mượt về đầu phần câu hỏi khi chuyển trang
+  // Tự động cuộn mượt về đầu phần câu hỏi hoặc đầu trang khi chuyển nhóm / xem kết quả
   const scrollToTestTop = () => {
     if (testContainerRef.current) {
       testContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
+
+  useEffect(() => {
+    if (currentStep === 2 && prevHollandStepRef.current !== hollandStep) {
+      prevHollandStepRef.current = hollandStep;
+      if (typeof window !== 'undefined') {
+        const rafId = window.requestAnimationFrame(() => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        const timerId = window.setTimeout(() => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 80);
+        return () => {
+          window.cancelAnimationFrame(rafId);
+          window.clearTimeout(timerId);
+        };
+      }
+    }
+    prevHollandStepRef.current = hollandStep;
+  }, [currentStep, hollandStep]);
 
   const RIASEC_ORDER: RiasecKey[] = ['R', 'I', 'A', 'S', 'E', 'C'];
   const [hollandGroupIndex, setHollandGroupIndex] = useState(0); // 0..5 (Phần 1..6)
@@ -1140,6 +1162,7 @@ export default function GuidanceView({
   >('idle');
   const [autoSaveMessage, setAutoSaveMessage] = useState<string>('');
   const hasSavedForSlipRef = useRef<string | null>(null);
+  const lastSavedSignatureRef = useRef<string | null>(null);
 
   // Find dominant Holland categories
   const getDominantHolland = () => {
@@ -1242,20 +1265,30 @@ export default function GuidanceView({
   const evaluatedCombinations = frequencyConsultation.evaluatedTHPTCombinations;
   const top3Combinations = frequencyConsultation.top3THPTCombinations;
 
-  // Tổ hợp THPT học sinh lựa chọn (trong TOP 3) - Không tự ý chọn trước, để học sinh tự chọn
+  // Tổ hợp THPT học sinh lựa chọn (duy nhất 01 tổ hợp trong TOP 3 đề xuất) - Không tự ý chọn trước, để học sinh tự nhấn nút chọn
   const activeChosenCombination = useMemo(() => {
-    if (chosenCombinationCode && evaluatedCombinations.length > 0) {
-      const match = evaluatedCombinations.find((e) => e.comb.maToHopTHPT === chosenCombinationCode);
+    if (chosenCombinationCode && top3Combinations.length > 0) {
+      const match = top3Combinations.find((e) => e.comb.maToHopTHPT === chosenCombinationCode);
       if (match) return match;
     }
     return null;
-  }, [chosenCombinationCode, evaluatedCombinations]);
+  }, [chosenCombinationCode, top3Combinations]);
 
   const activeChosenRank = useMemo(() => {
     if (!activeChosenCombination) return null;
-    const idx = evaluatedCombinations.findIndex((e) => e.comb.maToHopTHPT === activeChosenCombination.comb.maToHopTHPT);
+    const idx = top3Combinations.findIndex((e) => e.comb.maToHopTHPT === activeChosenCombination.comb.maToHopTHPT);
     return idx >= 0 ? idx + 1 : null;
-  }, [activeChosenCombination, evaluatedCombinations]);
+  }, [activeChosenCombination, top3Combinations]);
+
+  // Nếu danh sách Top 3 thay đổi (do đổi trường hoặc đổi nguyện vọng) và mã đã chọn không còn nằm trong Top 3, đặt lại về chưa chọn
+  useEffect(() => {
+    if (chosenCombinationCode && top3Combinations.length > 0) {
+      const stillInTop3 = top3Combinations.some((e) => e.comb.maToHopTHPT === chosenCombinationCode);
+      if (!stillInTop3) {
+        setChosenCombinationCode(null);
+      }
+    }
+  }, [chosenCombinationCode, top3Combinations]);
 
   // Dữ liệu môn lựa chọn ưu tiên từ bảng tần suất (dùng cho trường hợp fallback nếu trường chưa cập nhật TO_HOP_THPT)
   const neededElectivesAnalysis = useMemo(() => {
@@ -1309,59 +1342,123 @@ export default function GuidanceView({
     return Array.from(set);
   }, [wishesAnalysis]);
 
-  // 02 Môn thi tốt nghiệp dự kiến theo Thuật toán Thống kê tần suất môn học ưu tiên NV1
+  // 02 Môn thi tốt nghiệp dự kiến & đối chiếu nguyện vọng theo tổ hợp THPT đang chọn (hoặc Top 1 đề xuất)
   const recommendedGraduationElectives = useMemo(() => {
-    const activeComb = activeChosenCombination;
-    const useFallbackExamPair =
-      (activeComb && !activeComb.containsBothProjectedExams) ||
-      (!activeComb &&
-        evaluatedCombinations.length > 0 &&
-        !frequencyConsultation.anyTHPTContainsBothProjected);
-
-    const activeEval = useFallbackExamPair
-      ? (activeComb || evaluatedCombinations[0]).bestExamPairInCombo
+    const activeTargetComb = activeChosenCombination || evaluatedCombinations[0] || null;
+    const activeEval = activeTargetComb
+      ? activeTargetComb.bestExamPairInCombo
       : frequencyConsultation.projectedEvaluation;
+
+    const wishesCount = wishesAnalysis.length;
+    const isUsingChosenCombo = Boolean(activeChosenCombination);
+
+    const satisfiedDesc = activeEval.breakdown
+      .filter((b) => b.isSatisfied)
+      .map(
+        (b) =>
+          `NV${b.order} (${b.majorName} – ${b.schoolName}) qua ${b.satisfiedCombos
+            .map((c) => c.code)
+            .filter(Boolean)
+            .join(', ')}`
+      )
+      .join('; ');
+
+    const unsatisfiedDesc = activeEval.breakdown
+      .filter((b) => !b.isSatisfied)
+      .map((b) => {
+        const closest = b.partialCombos[0];
+        return closest
+          ? `NV${b.order} (${closest.code} thiếu ${closest.missing.join(', ')})`
+          : `NV${b.order}`;
+      })
+      .join('; ');
+
+    let rationale = frequencyConsultation.selectionReasonText;
+    if (isUsingChosenCombo && activeTargetComb) {
+      rationale = `Theo tổ hợp ${activeTargetComb.comb.maToHopTHPT} mà học sinh đã chọn, cặp 02 môn thi tốt nghiệp tự chọn tối ưu nhất là ${activeEval.sub1} + ${activeEval.sub2} (cùng Toán, Ngữ văn tạo thành 04 môn thi dự kiến; điểm trọng số nguyện vọng: ${activeEval.wishWeightScore}/${activeEval.maxPossibleWishWeightScore || activeEval.wishWeightScore}).`;
+      if (satisfiedDesc) {
+        rationale += ` Đáp ứng đầy đủ về môn học cho ${activeEval.satisfiedWishesCount}/${wishesCount} nguyện vọng: ${satisfiedDesc}.`;
+      }
+      if (unsatisfiedDesc) {
+        rationale += ` Chưa đáp ứng đồng thời ở kỳ thi tốt nghiệp: ${unsatisfiedDesc}.`;
+      }
+      rationale += ` Lưu ý: Đây chỉ là đối chiếu môn học, không phải xác nhận đủ điều kiện trúng tuyển đại học.`;
+    }
+
+    let limitationNotice: string | null = frequencyConsultation.examPairLimitationNotice;
+    if (isUsingChosenCombo && activeTargetComb) {
+      if (wishesCount > 0 && !activeEval.allWishesSatisfied) {
+        const satParts = activeEval.breakdown
+          .filter((b) => b.isSatisfied)
+          .map((b) => `NV${b.order} (${b.satisfiedCombos.map((c) => c.code).join(', ')})`);
+        const unsatParts = activeEval.breakdown
+          .filter((b) => !b.isSatisfied)
+          .map((b) => {
+            const bestP = b.partialCombos[0];
+            if (!bestP) return `NV${b.order}`;
+            return `NV${b.order} (${bestP.code} thiếu ${bestP.missing.join(', ')}${bestP.coveredByTHPTSubjects ? ' — có học ở THPT nhưng không thi đồng thời trong 2 môn tự chọn' : ''})`;
+          });
+        limitationNotice = `Giới hạn tổ hợp ${activeTargetComb.comb.maToHopTHPT}: Không có cặp 02 môn thi tự chọn nào trong tổ hợp này đáp ứng đồng thời cả ${wishesCount} nguyện vọng. Phương án tối ưu nhất là ${activeEval.sub1} + ${activeEval.sub2} (đạt ${satParts.length > 0 ? satParts.join('; ') : 'chưa đạt NV nào'}; chưa đáp ứng: ${unsatParts.join('; ')}).`;
+      } else {
+        limitationNotice = null;
+      }
+    }
 
     return {
       subject1: activeEval.sub1,
       subject2: activeEval.sub2,
       fourExamSubjects: activeEval.fourSubjects,
       satisfiedWishesCount: activeEval.satisfiedWishesCount,
+      wishWeightScore: activeEval.wishWeightScore,
+      maxPossibleWishWeightScore: activeEval.maxPossibleWishWeightScore,
       supportsNV1: activeEval.supportsNV1,
       supportsNV2: activeEval.supportsNV2,
       supportsNV3: activeEval.supportsNV3,
       allWishesSatisfied: activeEval.allWishesSatisfied,
       totalSatisfiedCombos: activeEval.totalSatisfiedCombos,
       wishesBreakdown: activeEval.breakdown,
+      activeTargetComb,
       alternativePairs: frequencyConsultation.alternativePairs,
       tiedTopPairs: frequencyConsultation.tiedTopPairs,
       higherCoverageAlternatives: frequencyConsultation.higherCoverageAlternatives,
-      rationale: useFallbackExamPair
-        ? `${frequencyConsultation.thptFallbackNotice || ''} Phương án cặp môn thi khả thi theo tổ hợp THPT này là ${activeEval.sub1} + ${activeEval.sub2} (đáp ứng ${activeEval.satisfiedWishesCount}/${wishesAnalysis.length} nguyện vọng).`
-        : frequencyConsultation.selectionReasonText,
-      isFrequencyProjected: !useFallbackExamPair,
+      rationale,
+      limitationNotice,
+      isFrequencyProjected: !isUsingChosenCombo,
       statusTag: activeEval.allWishesSatisfied ? 'FULL_MATCH' : 'PARTIAL_MATCH',
       statusBadgeText: activeEval.allWishesSatisfied
-        ? `Đáp ứng đầy đủ ${activeEval.satisfiedWishesCount}/${wishesAnalysis.length} nguyện vọng`
-        : 'Phù hợp theo tần suất, chưa đáp ứng đầy đủ tổ hợp xét tuyển',
+        ? `Đáp ứng đầy đủ về môn học ${activeEval.satisfiedWishesCount}/${wishesCount} nguyện vọng`
+        : `Phương án tối ưu hiện có (đạt ${activeEval.satisfiedWishesCount}/${wishesCount} nguyện vọng)`,
     };
   }, [activeChosenCombination, evaluatedCombinations, frequencyConsultation, wishesAnalysis.length]);
 
-  // Tự động chuẩn bị và lưu kết quả tư vấn vào CSDL 3 Sheet (Google Sheets)
-  const triggerAutoSaveConsultation = async () => {
+  const currentChosenCombinationCode = activeChosenCombination?.comb.maToHopTHPT || '';
+  const currentSaveSignature = `${effectiveSlipId}::${currentChosenCombinationCode}::${selectedSchoolCode}::${activeWishes.map((w) => w.maNganh).join(',')}`;
+
+  // Tự động chuẩn bị và lưu (hoặc cập nhật theo cùng MaPhieu) kết quả tư vấn vào CSDL 3 Sheet (Google Sheets)
+  const triggerAutoSaveConsultation = async (forceRetry: boolean = false) => {
     if (!consentSaveData) {
       setAutoSaveStatus('skipped');
       setAutoSaveMessage('Học sinh đã chọn không lưu thông tin cá nhân vào hệ thống máy chủ.');
       return;
     }
 
-    // Đảm bảo chỉ lưu 1 lần cho mỗi phiên tư vấn (Idempotency)
-    if (hasSavedForSlipRef.current === effectiveSlipId) {
+    const chosenCode = currentChosenCombinationCode.trim();
+    const top3Codes = top3Combinations.map((c) => c.comb.maToHopTHPT).filter(Boolean);
+    const saveSignature = currentSaveSignature;
+
+    // Tránh gửi lặp nếu dữ liệu không thay đổi
+    if (!forceRetry && lastSavedSignatureRef.current === saveSignature) {
       return;
     }
 
+    const isUpdate = hasSavedForSlipRef.current === effectiveSlipId;
+
     setAutoSaveStatus('saving');
-    setAutoSaveMessage('Đang tự động chuẩn hóa và lưu kết quả tư vấn vào 3 sheet CSDL...');
+    setAutoSaveMessage(
+      isUpdate
+        ? 'Đang cập nhật tổ hợp môn lựa chọn theo mã phiếu tư vấn...'
+        : 'Đang tự động chuẩn hóa và lưu kết quả tư vấn vào 3 sheet CSDL...'
+    );
 
     try {
       const now = new Date();
@@ -1369,11 +1466,9 @@ export default function GuidanceView({
       const thoiGianStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
       const dominant = getDominantHolland();
-      const topComb1 = top3Combinations[0]?.comb.maToHopTHPT || '';
-      const topComb2 = top3Combinations[1]?.comb.maToHopTHPT || '';
       const primaryWish = activeWishes[0] || universityWishes[0] || null;
 
-      // 1. KET_QUA_TU_VAN
+      // 1. KET_QUA_TU_VAN - Chỉ lưu 01 mã tổ hợp học sinh lựa chọn cuối cùng (phân biệt rõ với Top 3 đề xuất)
       const ketQuaTuVan: KetQuaTuVanRecord = {
         MaPhieu: effectiveSlipId,
         ThoiGian: thoiGianStr,
@@ -1387,11 +1482,13 @@ export default function GuidanceView({
         HollandTop1: hollandCalcResult.top3[0]?.code || dominant.code,
         HollandTop2: hollandCalcResult.top3[1]?.code || '',
         HollandTop3: hollandCalcResult.top3[2]?.code || '',
-        ToHopTHPTDeXuat1: topComb1,
-        ToHopTHPTDeXuat2: topComb2,
+        ToHopTHPTDeXuat1: chosenCode,
+        ToHopTHPTDeXuat2: '',
+        ToHopTHPTDaChon: chosenCode,
+        Top3ToHopDeXuat: top3Codes.join(', '),
         MonThiTuChon1_DuKien: recommendedGraduationElectives.subject1 || '',
         MonThiTuChon2_DuKien: recommendedGraduationElectives.subject2 || '',
-        GhiChuCanTuVan: `Đã phân tích ${activeWishes.length} nguyện vọng; Nhóm Holland: ${hollandCalcResult.hollandCode}; Đề xuất 2 môn thi tốt nghiệp: ${recommendedGraduationElectives.subject1} và ${recommendedGraduationElectives.subject2}.`,
+        GhiChuCanTuVan: `Đã phân tích ${activeWishes.length} nguyện vọng; Nhóm Holland: ${hollandCalcResult.hollandCode}; Top 3 đề xuất: ${top3Codes.join(', ') || 'Chưa có'}; Tổ hợp HS chọn: ${chosenCode || 'Chưa chọn'}; Đề xuất 2 môn thi tốt nghiệp: ${recommendedGraduationElectives.subject1} và ${recommendedGraduationElectives.subject2}.`,
         DongYLuuDuLieu: consentSaveData ? 'Có' : 'Không',
       };
 
@@ -1419,7 +1516,7 @@ export default function GuidanceView({
           TyLe: pctStr,
           XepHang: rank,
           MaToHopXetTuyen: primaryCombo,
-          MaToHopTHPT: topComb1,
+          MaToHopTHPT: chosenCode,
           SoMonTrungKhop: isTop3 ? 3 : 1,
           MonThieu: isTop3 ? '' : 'Xem chi tiết đề án tuyển sinh',
           DanhGiaPhuHop: `Mức ${fitLevel} (${score}/18 · ${pctStr})`,
@@ -1441,8 +1538,10 @@ export default function GuidanceView({
           MaNganh: w.maNganh || '',
           TenNganh: w.tenNganh || '',
           MaToHopXetTuyen: examCombos,
-          MaToHopTHPTDeXuat: topComb1,
-          DanhGiaPhuHop: `Phù hợp với tổ hợp THPT ${topComb1 || 'khuyến nghị'} tại ${selectedSchool?.shortName || selectedSchool?.name || 'trường THPT'}`,
+          MaToHopTHPTDeXuat: chosenCode,
+          DanhGiaPhuHop: chosenCode
+            ? `Phù hợp với tổ hợp THPT đã chọn (${chosenCode}) tại ${selectedSchool?.shortName || selectedSchool?.name || 'trường THPT'}`
+            : `Top 3 đề xuất: ${top3Codes.join(', ') || 'đang cập nhật'} (học sinh chưa chọn tổ hợp)`,
         };
       });
 
@@ -1450,6 +1549,8 @@ export default function GuidanceView({
         maPhieu: effectiveSlipId,
         maHocSinhAnDanh: effectiveStudentId,
         dongYLuuDuLieu: consentSaveData,
+        isUpdate,
+        upsertByMaPhieu: true,
         ketQuaTuVan,
         chiTietTuVan,
         nguyenVongHocSinh,
@@ -1457,6 +1558,7 @@ export default function GuidanceView({
 
       if (response.ok) {
         hasSavedForSlipRef.current = effectiveSlipId;
+        lastSavedSignatureRef.current = saveSignature;
         setAutoSaveStatus('success');
         setAutoSaveMessage(`Đã tự động lưu thành công kết quả tư vấn vào CSDL (Mã phiếu: ${effectiveSlipId}).`);
       } else if (response.errorType === 'WRITE_ENDPOINT_NOT_CONFIGURED') {
@@ -1474,12 +1576,21 @@ export default function GuidanceView({
     }
   };
 
-  // Tự động kích hoạt lưu kết quả khi vào Bước 4 nếu chưa lưu
+  // Tự động kích hoạt lưu kết quả khi vào Bước 4, và tự động cập nhật theo cùng mã phiếu khi học sinh chọn / đổi tổ hợp
   useEffect(() => {
-    if (currentStep === 4 && hasSavedForSlipRef.current !== effectiveSlipId && autoSaveStatus === 'idle') {
-      triggerAutoSaveConsultation();
+    if (currentStep !== 4 || !consentSaveData || toHopTHPTLoading) {
+      return;
     }
-  }, [currentStep, effectiveSlipId, autoSaveStatus]);
+    if (lastSavedSignatureRef.current === currentSaveSignature) {
+      return;
+    }
+    const isInitialSave = hasSavedForSlipRef.current !== effectiveSlipId;
+    const delayMs = isInitialSave ? 0 : 450;
+    const timer = window.setTimeout(() => {
+      triggerAutoSaveConsultation();
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [currentStep, effectiveSlipId, currentSaveSignature, consentSaveData, toHopTHPTLoading]);
 
   // Sao chép báo cáo tư vấn chi tiết vào Clipboard
   const handleCopySummary = () => {
@@ -1515,11 +1626,13 @@ export default function GuidanceView({
       combSection = `TỔ HỢP THPT ${activeChosenCombination ? 'LỰA CHỌN' : 'ĐỀ XUẤT TOP 1'} TẠI ${schoolDisplayName}:
 - Mã tổ hợp: ${displayComb.comb.maToHopTHPT}${activeChosenRank ? ` (Xếp hạng TOP ${activeChosenRank})` : ' (TOP 1)'}
 - 4 Môn lựa chọn: ${displayComb.electives.join(', ')}
-- 02 Môn lựa chọn bổ sung ưu tiên: ${displayComb.additionalElectives.join(', ') || 'Không có'}
+- 02 Môn lựa chọn bổ sung: ${displayComb.additionalElectives.join(', ') || 'Không có'}
 - 3 Chuyên đề: ${displayComb.topics.join(' · ') || 'Theo phân công của trường'}
-- Nguyện vọng hỗ trợ: ${displayComb.supportedWishesOrders.map((o) => `NV${o}`).join(', ') || 'Chưa bao phủ trực tiếp'}`;
+- Nguyện vọng đáp ứng đầy đủ (môn học THPT): ${displayComb.thptSupportedWishesOrders.map((o) => `NV${o}`).join(', ') || 'Chưa có'}
+- Nguyện vọng chưa đáp ứng: ${displayComb.thptUnsatisfiedWishesOrders.map((o) => `NV${o}`).join(', ') || 'Không có'}
+- Lý do xếp hạng: ${displayComb.rankingReason}`;
     } else {
-      const top4Electives = neededElectivesAnalysis.slice(0, 4).map(([name]) => name).join(', ') || 'Vật lí, Hóa học, Tin học, Sinh học';
+      const top4Electives = neededElectivesAnalysis.slice(0, 4).map(([name]) => name).join(', ') || 'Đang cập nhật theo trường THPT';
       combSection = `KHUNG MÔN HỌC THPT CẦN THIẾT (Do trường chưa cập nhật tổ hợp trên sheet TO_HOP_THPT):
 - Môn bắt buộc THPT: Toán, Ngữ văn, Tiếng Anh, Lịch sử
 - 4 Môn lựa chọn khuyến nghị: ${top4Electives}
@@ -1531,7 +1644,7 @@ export default function GuidanceView({
       top3RankingSection = `\nBẢNG XẾP HẠNG TOP 3 TỔ HỢP THPT TẠI ${schoolDisplayName}:
 ` + top3Combinations.map((item, idx) => {
         const isChosenTag = item.comb.maToHopTHPT === activeChosenCombination?.comb.maToHopTHPT ? ' [ĐÃ CHỌN]' : '';
-        return `• TOP ${idx + 1}: ${item.comb.maToHopTHPT}${isChosenTag}\n  - 4 Môn lựa chọn: ${item.electives.join(', ')}\n  - 2 Môn bổ sung ưu tiên: ${item.additionalElectives.join(', ')}\n  - 3 Chuyên đề: ${item.topics.join(' · ') || 'Theo phân công trường'}\n  - NV hỗ trợ: ${item.supportedWishesOrders.map(o => `NV${o}`).join(', ') || 'Chưa bao phủ'}`;
+        return `• ${item.rankTierLabel || `TOP ${idx + 1}`}: ${item.comb.maToHopTHPT}${isChosenTag}\n  - 4 Môn lựa chọn: ${item.electives.join(', ')}\n  - 3 Chuyên đề: ${item.topics.join(' · ') || 'Theo phân công trường'}\n  - NV đáp ứng đầy đủ: ${item.thptSupportedWishesOrders.map(o => `NV${o}`).join(', ') || 'Chưa có'}\n  - NV chưa đáp ứng: ${item.thptUnsatisfiedWishesOrders.map(o => `NV${o}`).join(', ') || 'Không có'}\n  - Lý do xếp hạng: ${item.rankingReason}`;
       }).join('\n');
     }
 
@@ -1544,7 +1657,7 @@ Học sinh: ${studentName || 'Học sinh'}
 Trường THPT: ${selectedSchool?.name || 'Trường THPT đã chọn'}
 Nhóm tính cách Holland RIASEC: ${dominant.name} (Mã: ${dominant.code})
 
-BẢNG THỐNG KÊ TẦN SUẤT MÔN HỌC (ƯU TIÊN NV1: HỆ SỐ ${WISH_PRIORITY_WEIGHTS[1]}–${WISH_PRIORITY_WEIGHTS[2]}–${WISH_PRIORITY_WEIGHTS[3]}):
+BẢNG THỐNG KÊ THAM KHẢO MỨC ĐỘ XUẤT HIỆN MÔN HỌC (TRỌNG SỐ NV1=3, NV2=2, NV3=1):
 ${freqTableText || '  Chưa có dữ liệu thống kê.'}
 
 NGUYỆN VỌNG ĐẠI HỌC & ĐỐI CHIẾU TỔ HỢP XÉT TUYỂN:
@@ -1555,10 +1668,10 @@ CƠ CẤU MÔN HỌC THPT:
 ${combSection}
 ${top3RankingSection}
 
-ĐỀ XUẤT 02 MÔN THI TỐT NGHIỆP DỰ KIẾN:
+ĐỀ XUẤT 04 MÔN THI TỐT NGHIỆP DỰ KIẾN:
 - 2 Môn thi bắt buộc: Toán, Ngữ văn
 - 02 Môn thi tự chọn dự kiến: ${recommendedGraduationElectives.subject1} và ${recommendedGraduationElectives.subject2}
-- Trạng thái đáp ứng: ${recommendedGraduationElectives.statusBadgeText}
+- Trạng thái đối chiếu môn học: ${recommendedGraduationElectives.statusBadgeText}
 (${recommendedGraduationElectives.rationale})
 
 TỔ HỢP XÉT TUYỂN ĐẠI HỌC CẦN CHUẨN BỊ:
@@ -1578,8 +1691,8 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
   };
 
   return (
-    <div className="w-full bg-slate-50 min-h-[calc(100vh-4.5rem)] py-6 sm:py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+    <div className="w-full bg-slate-50 min-h-[calc(100vh-4.5rem)] py-4 sm:py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 space-y-5 sm:space-y-6">
         
         {/* ========================================================= */}
         {/* BƯỚC 1: CHỌN TRƯỜNG THPT */}
@@ -3395,16 +3508,16 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
         {/* BƯỚC 4: XEM KẾT QUẢ TƯ VẤN (RÚT GỌN CƠ BẢN NHẤT) */}
         {/* ========================================================= */}
         {currentStep === 4 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-7 space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-3.5 sm:p-7 space-y-5 sm:space-y-6">
             
-            {/* 1. Header tóm tắt hồ sơ (Gọn đẹp, súc tích, không trùng lặp mã) */}
-            <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 rounded-2xl p-5 sm:p-6 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-white/15 backdrop-blur-md rounded-full text-xs font-bold text-blue-100">
+            {/* 1. Header tóm tắt hồ sơ (Gọn đẹp, súc tích, dễ nhìn trên điện thoại) */}
+            <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 rounded-2xl p-4 sm:p-6 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-white/15 backdrop-blur-md rounded-full text-[11px] sm:text-xs font-bold text-blue-100">
                   <Sparkles className="w-3.5 h-3.5 text-blue-200" />
                   <span>Báo cáo kết quả tư vấn tổ hợp môn THPT</span>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-black text-white">
+                <h2 className="text-lg sm:text-2xl font-black text-white leading-snug">
                   Hồ sơ tư vấn: {studentName || 'Học sinh'}
                 </h2>
                 <div className="text-xs sm:text-sm text-blue-100 flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -3412,14 +3525,14 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+              <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto shrink-0">
                 <div className="bg-white/15 backdrop-blur-md px-3.5 py-2 rounded-xl text-center border border-white/20">
                   <span className="text-[10px] text-blue-100 block font-semibold uppercase">Nhóm Holland</span>
-                  <span className="text-base font-black text-white">{getDominantHolland().code}</span>
+                  <span className="text-base sm:text-lg font-black text-white">{getDominantHolland().code}</span>
                 </div>
                 <div className="bg-white/15 backdrop-blur-md px-3.5 py-2 rounded-xl text-center border border-white/20">
                   <span className="text-[10px] text-blue-100 block font-semibold uppercase">Nguyện vọng</span>
-                  <span className="text-base font-black text-white">{activeWishes.length} NV</span>
+                  <span className="text-base sm:text-lg font-black text-white">{activeWishes.length} NV</span>
                 </div>
               </div>
             </div>
@@ -3447,8 +3560,8 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 <button
                   type="button"
                   onClick={() => {
-                    hasSavedForSlipRef.current = null;
-                    triggerAutoSaveConsultation();
+                    lastSavedSignatureRef.current = null;
+                    triggerAutoSaveConsultation(true);
                   }}
                   className="self-start sm:self-auto px-3.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
                 >
@@ -3478,8 +3591,8 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 <button
                   type="button"
                   onClick={() => {
-                    hasSavedForSlipRef.current = null;
-                    triggerAutoSaveConsultation();
+                    lastSavedSignatureRef.current = null;
+                    triggerAutoSaveConsultation(true);
                   }}
                   className="self-start sm:self-auto px-3.5 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
                 >
@@ -3498,16 +3611,37 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               </div>
             )}
 
-            {/* 2. TỔ HỢP MÔN HỌC TẠI TRƯỜNG THPT (TINH GỌN, Ý CHÍNH, KHÔNG TRÙNG LẶP) */}
+              {/* 2. TỔ HỢP MÔN HỌC TẠI TRƯỜNG THPT (TINH GỌN, Ý CHÍNH, KHÔNG TRÙNG LẶP) */}
             <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-2.5 gap-1">
-                <h3 className="text-base sm:text-lg font-extrabold text-slate-950 flex items-center gap-2">
-                  <Award className="w-5 h-5 text-blue-700" />
-                  <span>Tổ hợp môn học tại trường {selectedSchool?.name || 'THPT'}</span>
-                </h3>
-                <span className="text-xs font-extrabold text-blue-800 bg-blue-50 px-3 py-1 rounded-full border border-blue-200 self-start sm:self-auto">
-                  TOP {Math.min(3, top3Combinations.length)} Tổ hợp đề xuất
-                </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-2.5 gap-2">
+                <div>
+                  <h3 className="text-base sm:text-lg font-extrabold text-slate-950 flex items-center gap-2">
+                    <Award className="w-5 h-5 text-blue-700 shrink-0" />
+                    <span>Tổ hợp môn học tại trường {selectedSchool?.name || 'THPT'}</span>
+                  </h3>
+                  <p className="text-xs text-slate-700 font-medium mt-0.5">
+                    Hệ thống đề xuất <strong>Top {Math.min(3, top3Combinations.length)}</strong> tổ hợp phù hợp ·{' '}
+                    {activeChosenCombination ? (
+                      <span className="text-blue-800 font-bold">
+                        Tổ hợp học sinh lựa chọn: <span className="font-mono">{activeChosenCombination.comb.maToHopTHPT}</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-700">
+                        Vui lòng nhấn <strong>&ldquo;Chọn tổ hợp này&rdquo;</strong> để chốt duy nhất 01 tổ hợp lựa chọn.
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto shrink-0">
+                  <span className="text-xs font-extrabold text-blue-800 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                    TOP {Math.min(3, top3Combinations.length)} Tổ hợp đề xuất
+                  </span>
+                  {activeChosenCombination && (
+                    <span className="text-xs font-extrabold text-white bg-blue-600 px-3 py-1 rounded-full shadow-2xs">
+                      ✓ Đã chọn: {activeChosenCombination.comb.maToHopTHPT}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Thông báo nếu trường THPT không có tổ hợp nào chứa đủ cả 2 môn thi dự kiến */}
@@ -3521,103 +3655,114 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               )}
 
               {top3Combinations.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
                   {top3Combinations.map((item, idx) => {
                     const rank = idx + 1;
                     const isChosen = activeChosenCombination?.comb.maToHopTHPT === item.comb.maToHopTHPT;
-                    const isTop1 = idx === 0;
-                    const isHighlighted =
-                      isTop1 || item.comb.maToHopTHPT.toUpperCase() === 'THPT017_KHTN1';
+                    const isRecommendedTop1 = idx === 0;
+                    const tierShortLabel =
+                      rank === 1
+                        ? 'Top 1: Phù hợp nhất'
+                        : rank === 2
+                        ? 'Top 2: Thay thế'
+                        : 'Top 3: Dự phòng';
 
                     return (
                       <div
                         key={item.comb.maToHopTHPT}
                         className={`rounded-2xl transition-all flex flex-col justify-between space-y-3.5 ${
-                          isHighlighted
-                            ? 'p-4 sm:p-5 border-2 border-blue-600 bg-gradient-to-b from-blue-100/70 via-indigo-50/40 to-white shadow-lg ring-2 ring-blue-500/25'
+                          isChosen
+                            ? 'p-4 sm:p-5 border-2 border-blue-600 bg-gradient-to-b from-blue-100/75 via-indigo-50/45 to-white shadow-lg ring-2 ring-blue-500/25'
+                            : isRecommendedTop1
+                            ? 'p-4 sm:p-5 border-2 border-amber-400/90 bg-gradient-to-b from-amber-50/40 via-white to-white hover:border-amber-500 shadow-sm'
                             : 'p-4 sm:p-5 border border-slate-300 bg-white hover:border-slate-400 shadow-2xs'
                         }`}
                       >
                         <div className="space-y-3">
-                          {/* Header thẻ gọn */}
+                          {/* Header thẻ gọn - Phân biệt rõ Đề xuất hệ thống vs Lựa chọn của học sinh */}
                           <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`px-2.5 py-0.5 rounded-md text-xs sm:text-[13px] font-black ${
-                                isHighlighted ? 'bg-blue-600 text-white shadow-2xs' : 'bg-slate-200 text-slate-900 border border-slate-300'
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`px-2.5 py-1 rounded-lg text-xs font-black ${
+                                isChosen
+                                  ? 'bg-blue-600 text-white shadow-2xs'
+                                  : isRecommendedTop1
+                                  ? 'bg-amber-200/90 text-amber-950 border border-amber-300'
+                                  : 'bg-slate-200 text-slate-900 border border-slate-300'
                               }`}>
-                                Tổ hợp {rank}
+                                {tierShortLabel}
                               </span>
-                              <span className={`font-mono font-extrabold text-xs px-2.5 py-0.5 rounded-md border ${
-                                isHighlighted ? 'bg-indigo-700 text-white border-indigo-700 shadow-2xs' : 'bg-slate-100 text-slate-900 border-slate-300'
+                              <span className={`font-mono font-extrabold text-xs px-2.5 py-1 rounded-lg border ${
+                                isChosen
+                                  ? 'bg-indigo-700 text-white border-indigo-700 shadow-2xs'
+                                  : 'bg-slate-100 text-slate-900 border-slate-300'
                               }`}>
                                 {item.comb.maToHopTHPT}
                               </span>
                             </div>
 
                             {isChosen ? (
-                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-950 border border-emerald-300 flex items-center gap-1">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-                                <span>Đang chọn</span>
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-blue-600 text-white shadow-2xs flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                                <span>Học sinh chọn</span>
                               </span>
-                            ) : isHighlighted ? (
-                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-300/90 text-amber-950 border border-amber-400 shadow-2xs">
+                            ) : isRecommendedTop1 ? (
+                              <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-300/90 text-amber-950 border border-amber-400 shadow-2xs">
                                 ★ Đề xuất nổi bật
                               </span>
-                            ) : (
-                              <span className="text-xs text-slate-700 font-bold">
-                                Dự phòng
-                              </span>
-                            )}
+                            ) : null}
                           </div>
 
                           {/* 4 môn học lựa chọn */}
                           <div className={`p-3 rounded-xl border space-y-2 ${
-                            isHighlighted ? 'bg-blue-50/90 border-blue-300' : 'bg-slate-50 border-slate-200'
+                            isChosen ? 'bg-blue-50/90 border-blue-300' : 'bg-slate-50 border-slate-200'
                           }`}>
                             <span className="text-[11px] font-black uppercase tracking-wider text-blue-950 flex items-center gap-1">
                               <BookOpen className="w-3.5 h-3.5 text-blue-700" />
                               <span>4 Môn học lựa chọn (10–12)</span>
                             </span>
-                            <div className="grid grid-cols-2 gap-1.5">
+                            <div className="grid grid-cols-2 gap-2">
                               {item.electives.map((e, i) => (
                                 <div
                                   key={i}
-                                  className={`px-2 py-1.5 rounded-lg text-xs sm:text-[13px] font-extrabold text-center flex items-center justify-center gap-1 ${
-                                    isHighlighted
+                                  className={`px-2 py-2 rounded-lg text-xs sm:text-[13px] font-extrabold text-center flex items-center justify-center gap-1 leading-tight ${
+                                    isChosen
                                       ? 'bg-blue-600 text-white shadow-xs'
                                       : 'bg-white text-slate-950 border border-slate-300'
                                   }`}
                                 >
-                                  <Check className={`w-3.5 h-3.5 shrink-0 ${isHighlighted ? 'text-blue-100' : 'text-blue-700'}`} />
-                                  <span className="truncate">{e}</span>
+                                  <Check className={`w-3.5 h-3.5 shrink-0 ${isChosen ? 'text-blue-100' : 'text-blue-700'}`} />
+                                  <span className="break-words">{e}</span>
                                 </div>
                               ))}
                             </div>
                           </div>
 
                           {/* Chuyên đề học tập */}
-                          <div className="text-xs text-slate-900 bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-start justify-between gap-2">
+                          <div className="text-xs sm:text-[13px] text-slate-900 bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2">
                             <span className="font-extrabold text-slate-800 shrink-0">• Chuyên đề:</span>
-                            <span className="font-semibold text-slate-900 text-right">
+                            <span className="font-semibold text-slate-900 sm:text-right leading-relaxed">
                               {item.topics.length > 0 ? item.topics.join(' · ') : 'Theo phân công trường'}
                             </span>
                           </div>
+
                         </div>
 
-                        {/* Nút chọn tổ hợp */}
+                        {/* Nút chọn tổ hợp (chỉ chọn duy nhất 01 tổ hợp, thao tác chạm dễ dàng trên điện thoại) */}
                         <button
                           type="button"
-                          onClick={() => setChosenCombinationCode(isChosen ? null : item.comb.maToHopTHPT)}
-                          className={`w-full py-2.5 px-3 rounded-xl font-extrabold text-xs sm:text-[13px] flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          onClick={() => {
+                            if (!isChosen) {
+                              setChosenCombinationCode(item.comb.maToHopTHPT);
+                            }
+                          }}
+                          className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-extrabold text-sm flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer ${
                             isChosen
-                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                              : isTop1
-                              ? 'bg-white hover:bg-blue-50 text-blue-800 border-2 border-blue-600'
-                              : 'bg-white hover:bg-slate-50 text-slate-900 border border-slate-300'
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                              : 'bg-white hover:bg-blue-50 text-slate-900 border-2 border-slate-300 hover:border-blue-500'
                           }`}
                         >
-                          <Check className={`w-4 h-4 ${isChosen ? 'text-white stroke-[3]' : isTop1 ? 'text-blue-700 stroke-[2.5]' : 'text-slate-700'}`} />
-                          <span>{isChosen ? 'Đang chọn tổ hợp này' : 'Chọn tổ hợp này'}</span>
+                          {!isChosen && <Check className="w-4 h-4 text-slate-700" />}
+                          <span>{isChosen ? '✓ Đã chọn' : 'Chọn tổ hợp này'}</span>
                         </button>
                       </div>
                     );
@@ -3633,18 +3778,18 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               )}
             </div>
 
-            {/* 3. KHUNG TỔNG HỢP CỐT LÕI (3 CỘT GỌN GÀNG) */}
-            <div className="p-4 sm:p-5 bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-white border-2 border-blue-600 rounded-2xl shadow-xs space-y-3.5">
+            {/* 3. KHUNG TỔNG HỢP CỐT LÕI (3 CỘT GỌN GÀNG, NỔI BẬT TRÊN ĐIỆN THOẠI) */}
+            <div className="p-3.5 sm:p-5 bg-gradient-to-br from-blue-50/80 via-indigo-50/45 to-white border-2 border-blue-600 rounded-2xl shadow-xs space-y-3.5">
               <div className="border-b border-blue-200/70 pb-2.5">
                 <h3 className="text-base sm:text-lg font-black text-blue-950 flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block"></span>
-                  <span>Tổng hợp cơ cấu môn học THPT &amp; 02 môn thi tốt nghiệp dự kiến</span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block shrink-0"></span>
+                  <span>Tổng hợp cơ cấu môn học THPT &amp; 04 môn thi tốt nghiệp dự kiến</span>
                 </h3>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-3.5">
                 {/* 1. Môn học bắt buộc */}
-                <div className="p-4 bg-white rounded-xl border border-emerald-300 shadow-2xs space-y-2.5 flex flex-col justify-between">
+                <div className="p-3.5 sm:p-4 bg-white rounded-xl border border-emerald-300 shadow-2xs space-y-2.5 flex flex-col justify-between">
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
                       <span className="w-5 h-5 rounded-md bg-emerald-600 text-white flex items-center justify-center font-black text-xs shrink-0">1</span>
@@ -3664,9 +3809,9 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 </div>
 
                 {/* 2. Môn tư vấn lựa chọn & 2 môn bổ sung */}
-                <div className="p-4 bg-white rounded-xl border border-blue-400 shadow-2xs space-y-2.5 flex flex-col justify-between">
+                <div className="p-3.5 sm:p-4 bg-white rounded-xl border-2 border-blue-400 shadow-2xs space-y-2.5 flex flex-col justify-between">
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
                       <div className="flex items-center gap-1.5">
                         <span className="w-5 h-5 rounded-md bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0">2</span>
                         <strong className="text-xs sm:text-[13px] font-black text-blue-950 uppercase">
@@ -3690,34 +3835,38 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                       ))}
                     </div>
                   </div>
-                  <div className="pt-2 border-t border-blue-100 text-xs text-blue-950 font-semibold truncate">
-                    <strong>02 môn bổ sung ưu tiên:</strong>{' '}
-                    {(activeChosenCombination || top3Combinations[0])?.additionalElectives.join(', ') ||
-                      frequencyConsultation.activeSupplementaryElectives.join(', ') ||
-                      'Đang cập nhật'}
+                  <div className="pt-2 border-t border-blue-100 text-xs text-blue-950 font-semibold leading-relaxed">
+                    <strong>Chuyên đề:</strong>{' '}
+                    {(activeChosenCombination || top3Combinations[0])?.topics.length
+                      ? (activeChosenCombination || top3Combinations[0]).topics.join(' · ')
+                      : recommendedTopics.join(' · ') || 'Theo phân công trường'}
                   </div>
                 </div>
 
-                {/* 3. 02 Môn thi tốt nghiệp THPT dự kiến */}
-                <div className="p-4 bg-gradient-to-br from-indigo-50/80 to-purple-50/80 rounded-xl border-2 border-indigo-400 shadow-2xs space-y-2.5 flex flex-col justify-between">
+                {/* 3. 04 Môn thi tốt nghiệp THPT dự kiến (2 bắt buộc + 2 tự chọn) */}
+                <div className="p-3.5 sm:p-4 bg-gradient-to-br from-indigo-50/90 to-purple-50/85 rounded-xl border-2 border-indigo-500 shadow-xs space-y-2.5 flex flex-col justify-between">
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
                       <span className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center font-black text-xs shrink-0">3</span>
-                      <strong className="text-xs sm:text-[13px] font-black text-indigo-950 uppercase">02 Môn thi tốt nghiệp dự kiến:</strong>
+                      <strong className="text-xs sm:text-[13px] font-black text-indigo-950 uppercase">04 Môn thi tốt nghiệp dự kiến:</strong>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs font-bold text-indigo-950">
+                      <span className="px-2.5 py-1 rounded-md bg-white/95 border border-indigo-200">Bắt buộc: Toán</span>
+                      <span className="px-2.5 py-1 rounded-md bg-white/95 border border-indigo-200">Bắt buộc: Ngữ văn</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 pt-0.5">
-                      <div className="p-2 bg-white rounded-lg border border-indigo-300 text-center">
-                        <span className="text-[11px] font-extrabold text-indigo-800 uppercase block">Môn tự chọn 1</span>
-                        <span className="text-sm font-black text-indigo-950 truncate block">{recommendedGraduationElectives.subject1}</span>
+                      <div className="p-2.5 bg-white rounded-lg border-2 border-indigo-400 text-center shadow-2xs">
+                        <span className="text-[11px] font-extrabold text-indigo-800 uppercase block">Tự chọn 1</span>
+                        <span className="text-sm sm:text-base font-black text-indigo-950 leading-tight block mt-0.5">{recommendedGraduationElectives.subject1}</span>
                       </div>
-                      <div className="p-2 bg-white rounded-lg border border-indigo-300 text-center">
-                        <span className="text-[11px] font-extrabold text-indigo-800 uppercase block">Môn tự chọn 2</span>
-                        <span className="text-sm font-black text-indigo-950 truncate block">{recommendedGraduationElectives.subject2}</span>
+                      <div className="p-2.5 bg-white rounded-lg border-2 border-indigo-400 text-center shadow-2xs">
+                        <span className="text-[11px] font-extrabold text-indigo-800 uppercase block">Tự chọn 2</span>
+                        <span className="text-sm sm:text-base font-black text-indigo-950 leading-tight block mt-0.5">{recommendedGraduationElectives.subject2}</span>
                       </div>
                     </div>
                   </div>
                   <div
-                    className={`pt-2 border-t border-indigo-200 text-xs font-extrabold leading-tight ${
+                    className={`pt-2 border-t border-indigo-200 text-xs font-extrabold leading-snug ${
                       recommendedGraduationElectives.allWishesSatisfied ? 'text-emerald-900' : 'text-amber-900'
                     }`}
                   >
@@ -3726,17 +3875,23 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                   </div>
                 </div>
               </div>
+
             </div>
 
             {/* 4. BẢNG ĐỐI CHIẾU CHO TỪNG NGUYỆN VỌNG ĐẠI HỌC */}
             <div className="space-y-3.5">
-              <div className="border-b border-slate-200 pb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <h3 className="text-base sm:text-lg font-extrabold text-slate-950 flex items-center gap-2">
-                  <GraduationCap className="w-5 h-5 text-indigo-700" />
-                  <span>Bảng đối chiếu tổ hợp xét tuyển theo từng nguyện vọng đại học</span>
-                </h3>
+              <div className="border-b border-slate-200 pb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-base sm:text-lg font-extrabold text-slate-950 flex items-center gap-2">
+                    <GraduationCap className="w-5 h-5 text-indigo-700 shrink-0" />
+                    <span>Bảng đối chiếu tổ hợp xét tuyển theo từng nguyện vọng đại học</span>
+                  </h3>
+                  <p className="text-xs sm:text-[13px] text-slate-700 mt-1 leading-relaxed">
+                    Đối chiếu 04 môn thi dự kiến (<strong>Toán, Ngữ văn, {recommendedGraduationElectives.subject1}, {recommendedGraduationElectives.subject2}</strong>) với các tổ hợp xét tuyển trong CSDL · Chỉ là đối chiếu môn học, không phải xác nhận đủ điều kiện xét tuyển đại học.
+                  </p>
+                </div>
                 <span
-                  className={`text-xs font-extrabold px-3 py-1 rounded-full border self-start sm:self-auto ${
+                  className={`text-xs font-extrabold px-3 py-1.5 rounded-full border self-start sm:self-auto shrink-0 ${
                     recommendedGraduationElectives.allWishesSatisfied
                       ? 'text-emerald-950 bg-emerald-50 border-emerald-300'
                       : 'text-amber-950 bg-amber-50 border-amber-300'
@@ -3746,7 +3901,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 </span>
               </div>
 
-              {/* Bảng chi tiết đối chiếu */}
+              {/* Bảng chi tiết đối chiếu (2 cột gọn đẹp, dễ đọc trên điện thoại) */}
               <div className="space-y-3">
                 {recommendedGraduationElectives.wishesBreakdown.map((wb, bIdx) => {
                   const isNV1 = wb.order === 1;
@@ -3756,10 +3911,10 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                   return (
                     <div
                       key={wb.order || bIdx}
-                      className={`p-4 sm:p-5 rounded-2xl border-2 transition-all space-y-3 shadow-2xs ${
+                      className={`p-3.5 sm:p-5 rounded-2xl border-2 transition-all space-y-3 shadow-2xs ${
                         isFull
                           ? isNV1
-                            ? 'bg-emerald-50/50 border-emerald-400 ring-2 ring-emerald-500/10'
+                            ? 'bg-emerald-50/55 border-emerald-400 ring-2 ring-emerald-500/15'
                             : 'bg-white border-emerald-300'
                           : isPartial
                           ? 'bg-amber-50/40 border-amber-300'
@@ -3767,112 +3922,100 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                       }`}
                     >
                       {/* Tiêu đề nguyện vọng & mức độ phù hợp */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5 border-slate-200/80">
-                        <div className="flex items-center gap-2.5">
-                          <span className={`w-7 h-7 rounded-lg text-white font-black text-xs flex items-center justify-center shrink-0 ${
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b pb-2.5 border-slate-200/80">
+                        <div className="flex items-start sm:items-center gap-2.5">
+                          <span className={`w-8 h-8 rounded-lg text-white font-black text-xs flex items-center justify-center shrink-0 ${
                             isNV1 ? 'bg-blue-600' : wb.order === 2 ? 'bg-indigo-600' : 'bg-purple-600'
                           }`}>
                             NV{wb.order}
                           </span>
-                          <div>
+                          <div className="min-w-0">
                             <h4 className="text-sm sm:text-base font-black text-slate-950 leading-snug">
                               {wb.majorName}
                             </h4>
-                            <span className="text-xs font-bold text-blue-800">
+                            <span className="text-xs font-bold text-blue-800 block mt-0.5">
                               {wb.schoolName}
                             </span>
                           </div>
                         </div>
 
                         {/* Badge Mức độ phù hợp */}
-                        <div className="self-start sm:self-auto">
+                        <div className="self-start sm:self-auto shrink-0">
                           {isFull ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-                              <span>ĐÁP ỨNG ĐẦY ĐỦ ({wb.satisfiedCombos.length} tổ hợp)</span>
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                              <span>ĐÁP ỨNG ĐẦY ĐỦ VỀ MÔN HỌC ({wb.satisfiedCombos.length} tổ hợp)</span>
                             </span>
                           ) : isPartial ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
-                              <AlertCircle className="w-3.5 h-3.5 text-amber-700" />
-                              <span>ĐÁP ỨNG 1 PHẦN (2/3 môn thi)</span>
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                              <span>ĐÁP ỨNG MỘT PHẦN</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-950 border border-rose-300 shadow-2xs">
-                              <AlertCircle className="w-3.5 h-3.5 text-rose-700" />
-                              <span>CHƯA ĐÁP ỨNG ĐỦ MÔN THI</span>
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-950 border border-rose-300 shadow-2xs">
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-700 shrink-0" />
+                              <span>CHƯA ĐÁP ỨNG VỀ MÔN HỌC</span>
                             </span>
                           )}
                         </div>
                       </div>
 
-                      {/* Chi tiết 3 khối: Tổ hợp có trong dữ liệu, Tổ hợp đáp ứng đầy đủ, Môn còn thiếu */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs sm:text-[13px]">
+                      {/* Chi tiết 2 khối: Tổ hợp có trong dữ liệu & Tổ hợp đáp ứng đầy đủ */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs sm:text-[13px]">
                         {/* Cột 1: Các tổ hợp xét tuyển có trong dữ liệu */}
                         <div className="p-3.5 bg-white rounded-xl border border-slate-300 space-y-2">
                           <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider block">
                             Các tổ hợp trong CSDL ({wb.allCombos.length} tổ hợp):
                           </span>
-                          <div className="space-y-1.5">
-                            {wb.allCombos.map((c, i) => (
-                              <div key={i} className="text-xs text-slate-900 flex items-center justify-between gap-1.5">
-                                <span className="font-extrabold text-blue-950 font-mono bg-blue-50 px-2 py-0.5 rounded border border-blue-300">
-                                  {c.code}
-                                </span>
-                                <span className="text-slate-800 font-semibold truncate text-xs">
-                                  {c.rawSubjects.join(', ')}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                          {wb.allCombos.length > 0 ? (
+                            <div className="space-y-2">
+                              {wb.allCombos.map((c, i) => (
+                                <div key={i} className="text-xs text-slate-900 flex items-start justify-between gap-2">
+                                  <span className="font-extrabold text-blue-950 font-mono bg-blue-50 px-2 py-0.5 rounded border border-blue-300 shrink-0">
+                                    {c.code}
+                                  </span>
+                                  <span className="text-slate-800 font-semibold text-right leading-snug">
+                                    {c.rawSubjects.join(', ')}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-600 italic block">
+                              Chưa có dữ liệu tổ hợp xét tuyển cho ngành này.
+                            </span>
+                          )}
                         </div>
 
                         {/* Cột 2: Tổ hợp xét tuyển được đáp ứng đầy đủ */}
-                        <div className="p-3.5 bg-white rounded-xl border border-emerald-300 space-y-2">
+                        <div className="p-3.5 bg-white rounded-xl border-2 border-emerald-300 space-y-2">
                           <span className="text-xs font-extrabold text-emerald-900 uppercase tracking-wider block">
                             Tổ hợp đáp ứng đầy đủ ({wb.satisfiedCombos.length}):
                           </span>
                           {wb.satisfiedCombos.length > 0 ? (
-                            <div className="space-y-1.5">
+                            <div className="space-y-2">
                               {wb.satisfiedCombos.map((c, i) => (
-                                <div key={i} className="p-2 bg-emerald-50 rounded-lg border border-emerald-300 text-xs text-emerald-950 font-bold space-y-0.5">
-                                  <div className="flex items-center justify-between">
-                                    <strong className="text-emerald-950 font-mono">{c.code}</strong>
-                                    <span className="text-[11px] text-emerald-900 font-extrabold">✓ Thỏa mãn 100%</span>
+                                <div key={i} className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-300 text-xs text-emerald-950 font-bold space-y-0.5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <strong className="text-emerald-950 font-mono text-sm">{c.code}</strong>
+                                    <span className="text-[11px] text-emerald-900 font-extrabold">✓ Đáp ứng đủ môn học</span>
                                   </div>
-                                  <div className="text-xs text-emerald-900 font-semibold">
+                                  <div className="text-xs text-emerald-900 font-semibold leading-snug">
                                     {c.rawSubjects.join(' · ')}
                                   </div>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-xs text-slate-700 font-medium italic block">
-                              Không có tổ hợp nào nằm trọn vẹn trong 4 môn thi này
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Cột 3: Môn còn thiếu nếu có */}
-                        <div className="p-3.5 bg-white rounded-xl border border-slate-300 space-y-2">
-                          <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider block">
-                            Môn còn thiếu theo từng tổ hợp:
-                          </span>
-                          {wb.partialCombos.length > 0 ? (
                             <div className="space-y-1.5">
-                              {wb.partialCombos.map((c, i) => (
-                                <div key={i} className="text-xs text-slate-900 flex flex-col p-2 rounded-lg bg-slate-50 border border-slate-300">
-                                  <div className="flex items-center justify-between font-mono font-bold text-xs">
-                                    <span className="text-slate-950">{c.code} ({c.rawSubjects.join(', ')})</span>
-                                  </div>
-                                  <div className="text-xs text-amber-950 font-semibold mt-0.5">
-                                    Thiếu môn: <strong className="text-rose-800">{c.missing.join(', ')}</strong>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="p-2.5 bg-emerald-50 rounded-lg text-emerald-950 text-xs font-bold border border-emerald-200">
-                              ✓ Mọi tổ hợp xét tuyển đều được bao phủ trọn vẹn môn thi!
+                              <span className="text-xs text-slate-700 font-medium italic block leading-relaxed">
+                                Không có tổ hợp nào đủ 100% môn trong 4 môn thi tốt nghiệp dự kiến
+                              </span>
+                              {wb.thptCoveredComboCodes.length > 0 && (
+                                <span className="text-[11px] text-blue-900 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1.5 block font-semibold leading-relaxed">
+                                  Môn học THPT của tổ hợp đang xét có bao phủ {wb.thptCoveredComboCodes.join(', ')}, nhưng 2 môn thi tự chọn không thể dự thi đồng thời tất cả môn.
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
@@ -3906,30 +4049,30 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               </div>
             </div>
 
-            {/* 6. HÀNG NÚT ĐIỀU HƯỚNG & HÀNH ĐỘNG */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200">
+            {/* 6. HÀNG NÚT ĐIỀU HƯỚNG & HÀNH ĐỘNG (Dễ bấm trên điện thoại) */}
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 pt-3 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => onStepChange(3)}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
               >
                 ← Quay lại chỉnh sửa nguyện vọng
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 sm:flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleCopySummary}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+                  className="min-h-[44px] inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-800 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
                 >
                   {copied ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-green-600" />
-                      <span className="text-green-600">Đã sao chép báo cáo!</span>
+                      <Check className="w-4 h-4 text-green-600 shrink-0" />
+                      <span className="text-green-600">Đã sao chép!</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3.5 h-3.5 text-slate-600" />
+                      <Copy className="w-4 h-4 text-slate-600 shrink-0" />
                       <span>Sao chép kết quả</span>
                     </>
                   )}
@@ -3938,9 +4081,9 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 <button
                   type="button"
                   onClick={() => onStepChange(1)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
+                  className="min-h-[44px] inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
+                  <RotateCcw className="w-4 h-4 shrink-0" />
                   <span>Làm lại từ đầu</span>
                 </button>
               </div>

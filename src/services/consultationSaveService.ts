@@ -18,6 +18,8 @@ export interface KetQuaTuVanRecord {
   HollandTop3: string;
   ToHopTHPTDeXuat1: string;
   ToHopTHPTDeXuat2: string;
+  ToHopTHPTDaChon?: string;
+  Top3ToHopDeXuat?: string;
   MonThiTuChon1_DuKien: string;
   MonThiTuChon2_DuKien: string;
   GhiChuCanTuVan: string;
@@ -54,6 +56,8 @@ export interface SaveConsultationPayload {
   maPhieu: string;
   maHocSinhAnDanh: string;
   dongYLuuDuLieu: boolean;
+  isUpdate?: boolean;
+  upsertByMaPhieu?: boolean;
   ketQuaTuVan: KetQuaTuVanRecord;
   chiTietTuVan: ChiTietTuVanRecord[];
   nguyenVongHocSinh: NguyenVongHocSinhRecord[];

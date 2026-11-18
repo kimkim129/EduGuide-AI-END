@@ -1332,7 +1332,7 @@ export function createApiApp(): express.Express {
   // API Lưu kết quả tư vấn vào 3 sheet: KET_QUA_TU_VAN, CHI_TIET_TU_VAN, NGUYEN_VONG_HOC_SINH
   // Bảo vệ phía máy chủ, chống ghi lặp (Yêu cầu 4, 6, 8, 9, 11)
   // =========================================================================
-  const savedSlipsCache = new Set<string>();
+  const savedSlipsSignatureCache = new Map<string, string>();
 
   const handleCheckSaveStatus = (_req: Request, res: Response): void => {
     const rawUrl = (process.env.GOOGLE_APPS_SCRIPT_WRITE_URL || '').trim();
@@ -1347,7 +1347,7 @@ export function createApiApp(): express.Express {
       hasWriteUrl,
       hasWriteSecret,
       isExecUrl,
-      savedSlipsCount: savedSlipsCache.size,
+      savedSlipsCount: savedSlipsSignatureCache.size,
     });
   };
 
@@ -1383,9 +1383,24 @@ export function createApiApp(): express.Express {
 
       const cleanSlipId = maPhieu.trim();
 
-      // Kiểm tra xem mã phiếu này đã được lưu trước đó chưa (Chống ghi trùng)
-      if (savedSlipsCache.has(cleanSlipId)) {
-        console.log(`[LuuKetQua] Phiếu ${cleanSlipId} đã được ghi nhận trước đó, bỏ qua yêu cầu ghi lặp.`);
+      const payloadSignature = JSON.stringify({
+        dongY: dongYLuuDuLieu !== false,
+        toHop1: String(ketQua?.ToHopTHPTDeXuat1 || ''),
+        toHop2: String(ketQua?.ToHopTHPTDeXuat2 || ''),
+        toHopChon: String(ketQua?.ToHopTHPTDaChon || ''),
+        truongTHPT: String(ketQua?.MaTruongTHPT || ''),
+        truongDH: String(ketQua?.MaTruongDH || ''),
+        nganh: String(ketQua?.MaNganh || ''),
+        holland: [ketQua?.HollandTop1, ketQua?.HollandTop2, ketQua?.HollandTop3].join('-'),
+        nvCount: Array.isArray(nguyenVong) ? nguyenVong.length : 0,
+      });
+
+      const previousSignature = savedSlipsSignatureCache.get(cleanSlipId);
+      const isUpdateForSameSlip = previousSignature !== undefined && previousSignature !== payloadSignature;
+
+      // Chống ghi lặp khi dữ liệu giống hệt lần đã lưu trước đó cho cùng MaPhieu
+      if (previousSignature === payloadSignature) {
+        console.log(`[LuuKetQua] Phiếu ${cleanSlipId} không thay đổi dữ liệu, bỏ qua yêu cầu ghi lặp.`);
         res.json({
           ok: true,
           saved: true,
@@ -1397,7 +1412,7 @@ export function createApiApp(): express.Express {
 
       // Nếu học sinh chọn không lưu thông tin cá nhân
       if (dongYLuuDuLieu === false) {
-        savedSlipsCache.add(cleanSlipId);
+        savedSlipsSignatureCache.set(cleanSlipId, payloadSignature);
         console.log(`[LuuKetQua] Phiếu ${cleanSlipId}: Học sinh chọn không lưu dữ liệu.`);
         res.json({
           ok: true,
@@ -1491,8 +1506,11 @@ export function createApiApp(): express.Express {
         ketQua,
         chiTiet,
         nguyenVong,
-        // Các trường bổ trợ đảm bảo tương thích mọi phiên bản Google Apps Script
+        // Các trường bổ trợ đảm bảo tương thích mọi phiên bản Google Apps Script & cập nhật theo MaPhieu
         action: 'luuKetQua',
+        isUpdate: Boolean(payload.isUpdate || isUpdateForSameSlip),
+        updateExisting: true,
+        upsertByMaPhieu: true,
         maPhieu: cleanSlipId,
         maHocSinhAnDanh: String(maHocSinhAnDanh || ''),
         ketQuaTuVan: ketQua,
@@ -1592,12 +1610,15 @@ export function createApiApp(): express.Express {
         !upstreamJson.error;
 
       if (isUpstreamConfirmed) {
-        savedSlipsCache.add(cleanSlipId);
-        console.log(`[LuuKetQua] Phiếu ${cleanSlipId} đã được Google Sheets xác nhận lưu thành công.`);
+        savedSlipsSignatureCache.set(cleanSlipId, payloadSignature);
+        console.log(`[LuuKetQua] Phiếu ${cleanSlipId} đã được Google Sheets xác nhận ${isUpdateForSameSlip ? 'cập nhật' : 'lưu'} thành công.`);
         res.json({
           ok: true,
           saved: true,
-          message: 'Đã lưu toàn bộ dữ liệu tư vấn thành công vào 3 sheet Google Sheets.',
+          updated: isUpdateForSameSlip,
+          message: isUpdateForSameSlip
+            ? 'Đã cập nhật tổ hợp môn lựa chọn theo mã phiếu tư vấn trên Google Sheets.'
+            : 'Đã lưu toàn bộ dữ liệu tư vấn thành công vào 3 sheet Google Sheets.',
           upstream: upstreamJson,
         });
       } else {
@@ -1671,6 +1692,14 @@ async function startServer() {
       ? Number(process.env.PORT)
       : 3000;
 
+  const hostArgIdx = process.argv.indexOf('--host');
+  const HOST =
+    hostArgIdx !== -1 && process.argv[hostArgIdx + 1] ? process.argv[hostArgIdx + 1] : '0.0.0.0';
+
+  const httpServer = app.listen(PORT, HOST, () => {
+    console.log(`EduGuide AI Server running at http://${HOST}:${PORT}`);
+  });
+
   // Tích hợp Vite middleware trong môi trường Dev hoặc phục vụ static trong Production
   if (process.env.NODE_ENV === 'production') {
     app.use('/src/assets', express.static(path.resolve(__dirname, 'src', 'assets')));
@@ -1679,41 +1708,50 @@ async function startServer() {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   } else {
-    const fs = await import('fs');
-    const vitePkg = 'vite';
-    const { createServer } = await import(/* @vite-ignore */ vitePkg);
-    const vite = await createServer({
-      server: {
-        middlewareMode: true,
-        hmr: process.env.DISABLE_HMR !== 'true',
-      },
-      appType: 'spa',
+    const viteReadyPromise = (async () => {
+      const fs = await import('fs');
+      const vitePkg = 'vite';
+      const { createServer } = await import(/* @vite-ignore */ vitePkg);
+      const vite = await createServer({
+        server: {
+          middlewareMode: true,
+          hmr: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer },
+        },
+        appType: 'spa',
+      });
+      return { fs, vite };
+    })();
+
+    app.use(async (req, res, next) => {
+      try {
+        const { vite } = await viteReadyPromise;
+        vite.middlewares(req, res, next);
+      } catch (err) {
+        next(err);
+      }
     });
-    app.use(vite.middlewares);
 
     // Fallback cho định tuyến SPA trong môi trường Dev
     app.use('*', async (req, res, next) => {
       const url = req.originalUrl;
       try {
+        const { fs, vite } = await viteReadyPromise;
         let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
         template = await vite.transformIndexHtml(url, template);
         res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
       } catch (e: any) {
-        if (vite.ssrFixStacktrace) {
-          vite.ssrFixStacktrace(e);
+        try {
+          const { vite } = await viteReadyPromise;
+          if (vite.ssrFixStacktrace) {
+            vite.ssrFixStacktrace(e);
+          }
+        } catch {
+          // ignore
         }
         next(e);
       }
     });
   }
-
-  const hostArgIdx = process.argv.indexOf('--host');
-  const HOST =
-    hostArgIdx !== -1 && process.argv[hostArgIdx + 1] ? process.argv[hostArgIdx + 1] : '0.0.0.0';
-
-  app.listen(PORT, HOST, () => {
-    console.log(`EduGuide AI Server running at http://${HOST}:${PORT}`);
-  });
 }
 
 if (!process.env.VERCEL) {
