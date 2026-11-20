@@ -1,5 +1,3 @@
-import { Compass } from 'lucide-react';
-
 interface FooterProps {
   onNavigateHome: () => void;
   onNavigateGuidanceStep: (step: 1 | 2 | 3 | 4) => void;
@@ -16,10 +14,12 @@ export default function Footer({
           
           {/* Brand & Purpose */}
           <div className="md:col-span-5 space-y-3">
-            <div className="flex items-center gap-2.5 text-white font-bold text-lg">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
-                <Compass className="w-4 h-4" />
-              </div>
+            <div className="flex items-center gap-2.5 text-white font-bold text-base sm:text-lg">
+              <img
+                src="/pwa-192x192.png"
+                alt="EduGuide AI"
+                className="w-8 h-8 rounded-lg shrink-0"
+              />
               <span>EduGuide AI – Hướng nghiệp thông minh</span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm">
@@ -32,16 +32,16 @@ export default function Footer({
           </div>
 
           {/* Quick Links */}
-          <div className="md:col-span-3 space-y-3">
+          <div className="md:col-span-3 space-y-2.5">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-200">
               Điều hướng nhanh
             </h4>
-            <ul className="space-y-2 text-xs">
+            <ul className="space-y-1 text-xs">
               <li>
                 <button
                   type="button"
                   onClick={onNavigateHome}
-                  className="hover:text-white transition-colors text-left cursor-pointer"
+                  className="py-1.5 hover:text-white transition-colors text-left cursor-pointer"
                 >
                   Trang chủ
                 </button>
@@ -50,7 +50,7 @@ export default function Footer({
                 <button
                   type="button"
                   onClick={() => onNavigateGuidanceStep(1)}
-                  className="hover:text-white transition-colors text-left cursor-pointer"
+                  className="py-1.5 hover:text-white transition-colors text-left cursor-pointer"
                 >
                   Chọn trường THPT Đà Nẵng
                 </button>
@@ -59,7 +59,7 @@ export default function Footer({
                 <button
                   type="button"
                   onClick={() => onNavigateGuidanceStep(2)}
-                  className="hover:text-white transition-colors text-left cursor-pointer"
+                  className="py-1.5 hover:text-white transition-colors text-left cursor-pointer"
                 >
                   Khám phá Holland (RIASEC)
                 </button>
@@ -68,7 +68,7 @@ export default function Footer({
                 <button
                   type="button"
                   onClick={() => onNavigateGuidanceStep(3)}
-                  className="hover:text-white transition-colors text-left cursor-pointer"
+                  className="py-1.5 hover:text-white transition-colors text-left cursor-pointer"
                 >
                   Chọn nguyện vọng đại học
                 </button>
@@ -77,7 +77,7 @@ export default function Footer({
                 <button
                   type="button"
                   onClick={() => onNavigateGuidanceStep(4)}
-                  className="hover:text-white transition-colors text-left text-blue-400 font-semibold cursor-pointer"
+                  className="py-1.5 hover:text-white transition-colors text-left text-blue-400 font-semibold cursor-pointer"
                 >
                   Xem kết quả tư vấn tổ hợp
                 </button>

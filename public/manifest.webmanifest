@@ -1,0 +1,35 @@
+{
+  "id": "/",
+  "name": "EduGuide AI",
+  "short_name": "EduGuide AI",
+  "description": "Ứng dụng tư vấn định hướng nghề nghiệp và hỗ trợ học sinh trúng tuyển lớp 10 lựa chọn tổ hợp môn học phù hợp theo chương trình GDPT 2018 tại Đà Nẵng.",
+  "lang": "vi",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1565C0",
+  "background_color": "#FFFFFF",
+  "categories": ["education", "utilities"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

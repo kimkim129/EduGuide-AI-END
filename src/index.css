@@ -6,4 +6,16 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: clip;
+  -webkit-tap-highlight-color: rgba(21, 101, 192, 0.12);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+header {
+  padding-top: env(safe-area-inset-top, 0px);
 }

@@ -1722,6 +1722,26 @@ async function startServer() {
       return { fs, vite };
     })();
 
+    if (process.env.DISABLE_HMR === 'true') {
+      app.get('/@vite/client', async (_req, res, next) => {
+        try {
+          const { vite } = await viteReadyPromise;
+          const result = await vite.transformRequest('/@vite/client');
+          if (result && typeof result.code === 'string') {
+            const patchedCode = result.code.replace(
+              /transport\.connect\(createHMRHandler\(handleMessage\)\);?/g,
+              '/* HMR WebSocket disabled via DISABLE_HMR=true */'
+            );
+            res.status(200).set({ 'Content-Type': 'application/javascript; charset=utf-8' }).end(patchedCode);
+            return;
+          }
+          next();
+        } catch (err) {
+          next(err);
+        }
+      });
+    }
+
     app.use(async (req, res, next) => {
       try {
         const { vite } = await viteReadyPromise;

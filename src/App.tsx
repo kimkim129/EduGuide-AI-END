@@ -8,6 +8,7 @@ import Header from './components/Header';
 import HeroSection from './components/HeroSection';
 import GuidanceView from './components/GuidanceView';
 import Footer from './components/Footer';
+import OfflineBanner from './components/OfflineBanner';
 import type { School } from './data/schoolsData';
 import { generateStudentSessionIds } from './services/consultationSaveService';
 
@@ -96,6 +97,9 @@ export default function App() {
         onNavigateHome={handleNavigateHome}
         onNavigateGuidanceStep={handleNavigateGuidanceStep}
       />
+
+      {/* Network connectivity notice */}
+      <OfflineBanner />
     </div>
   );
 }

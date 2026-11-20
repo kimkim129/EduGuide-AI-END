@@ -29,33 +29,33 @@ export default function HeroSection({
   };
 
   return (
-    <section id="hero" className="relative overflow-hidden pt-8 pb-16 lg:pt-14 lg:pb-20 bg-gradient-to-b from-blue-50/70 via-white to-slate-50">
+    <section id="hero" className="relative overflow-hidden pt-5 pb-12 sm:pt-8 sm:pb-16 lg:pt-14 lg:pb-20 bg-gradient-to-b from-blue-50/70 via-white to-slate-50">
       {/* Subtle decorative background glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 pointer-events-none opacity-40">
         <div className="absolute -top-24 left-1/4 w-96 h-96 bg-blue-300 rounded-full blur-3xl" />
         <div className="absolute -top-20 right-1/4 w-80 h-80 bg-sky-200 rounded-full blur-3xl" />
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
+      <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 lg:gap-10 items-center">
           
           {/* Left Column: Headline, Description, Features & Chatbot Input (7 cols) */}
-          <div className="lg:col-span-7 flex flex-col justify-center space-y-5">
+          <div className="lg:col-span-7 flex flex-col justify-center space-y-4 sm:space-y-5 min-w-0">
             
-            <div className="space-y-4">
+            <div className="space-y-3.5 sm:space-y-4">
               {/* Kicker badge */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-200/80 rounded-full text-xs font-semibold text-blue-700 tracking-wide w-fit">
-                <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
-                <span>Chương trình GDPT 2018 · Dành cho tân học sinh lớp 10 Đà Nẵng</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200/80 rounded-full text-xs font-semibold text-blue-700 tracking-wide max-w-full">
+                <span className="w-2 h-2 rounded-full bg-[#1565C0] shrink-0" />
+                <span className="leading-snug">Chương trình GDPT 2018 · Dành cho tân học sinh lớp 10 Đà Nẵng</span>
               </div>
 
               {/* Main Headline - Wraps cleanly on mobile/tablet, 1 line on laptop/desktop */}
-              <h1 className="text-2xl sm:text-3xl lg:text-[1.95rem] xl:text-[2.25rem] font-extrabold text-slate-900 tracking-tight leading-tight whitespace-normal xl:whitespace-nowrap">
-                Chọn đúng tổ hợp – <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-700 via-blue-600 to-sky-600">Vững bước tương lai</span>
+              <h1 className="text-[1.6rem] sm:text-3xl lg:text-[1.95rem] xl:text-[2.25rem] font-extrabold text-slate-900 tracking-tight leading-tight whitespace-normal xl:whitespace-nowrap">
+                Chọn đúng tổ hợp – <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#1565C0] via-blue-600 to-sky-600">Vững bước tương lai</span>
               </h1>
 
               {/* Exact introduction paragraph */}
-              <p className="text-sm sm:text-base text-slate-800 font-medium leading-relaxed text-justify">
+              <p className="text-sm sm:text-base text-slate-800 font-medium leading-relaxed text-left sm:text-justify">
                 Chúc mừng bạn đã trúng tuyển vào lớp 10! Việc chọn tổ hợp môn học là quyết định chiến lược định hình trực tiếp môn thi Tốt nghiệp THPT và nghề nghiệp sau này.{' '}
                 <strong className="text-blue-800 font-extrabold">EduGuide AI</strong> đồng hành cùng học sinh và phụ huynh tại TP Đà Nẵng phân tích năng lực, khám phá đam mê và chọn tổ hợp môn tối ưu nhất tại ngôi trường bạn theo học.
               </p>
@@ -63,11 +63,11 @@ export default function HeroSection({
 
             {/* Chatbot with question "Bạn tên gì?" and "Bắt đầu tư vấn" button next to it */}
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#1565C0] text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5 sm:mt-0">
                   <Bot className="w-5 h-5 text-white" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="text-xs font-bold uppercase tracking-wider text-blue-700 block">
                     Trợ lý EduGuide AI
                   </span>
@@ -78,33 +78,33 @@ export default function HeroSection({
               </div>
 
               <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
-                <div className="relative flex-1">
-                  <User className="w-4 h-4 text-slate-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <div className="relative flex-1 min-w-0">
+                  <User className="w-4 h-4 text-slate-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
-                    placeholder="Nhập họ và tên của bạn (ví dụ: Minh Anh, Hoàng Nam...)"
+                    placeholder="Nhập họ và tên của bạn..."
                     value={studentName}
                     onChange={(e) => {
                       onStudentNameChange(e.target.value);
                       if (errorMessage) setErrorMessage('');
                     }}
-                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/30 focus:border-blue-600 text-slate-950 font-medium placeholder:text-slate-600 transition-all"
+                    className="w-full min-h-[46px] pl-10 pr-4 py-2.5 text-base sm:text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/30 focus:border-blue-600 text-slate-950 font-medium placeholder:text-slate-600 transition-all"
                   />
                 </div>
 
                 {/* Nút Bắt đầu tư vấn ở kế tiếp chatbot */}
                 <button
                   type="submit"
-                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md shadow-blue-600/25 whitespace-nowrap cursor-pointer shrink-0"
+                  className="min-h-[46px] inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#1565C0] rounded-xl hover:bg-blue-800 active:scale-[0.98] transition-all shadow-md shadow-blue-600/25 whitespace-nowrap cursor-pointer shrink-0"
                 >
-                  <Compass className="w-4 h-4" />
+                  <Compass className="w-4 h-4 shrink-0" />
                   <span>Bắt đầu tư vấn</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4 shrink-0" />
                 </button>
               </form>
 
               {errorMessage && (
-                <p className="text-xs text-red-600 font-medium pl-1 pt-1">{errorMessage}</p>
+                <p className="text-xs text-red-600 font-medium pl-1 pt-0.5">{errorMessage}</p>
               )}
             </div>
 

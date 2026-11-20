@@ -726,6 +726,7 @@ export default function GuidanceView({
   const [uniApiErrorMessage, setUniApiErrorMessage] = useState<string>('');
   const [uniApiErrorObj, setUniApiErrorObj] = useState<ApiFetchError | null>(null);
   const [uniDuplicateWarning, setUniDuplicateWarning] = useState<string>('');
+  const [wish1ValidationError, setWish1ValidationError] = useState<string>('');
 
   // Tải danh mục tuyển sinh đại học & tổ hợp môn THPT từ Google Apps Script
   const handleFetchUniversityData = async (urlToUse?: string) => {
@@ -1698,7 +1699,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
         {/* BƯỚC 1: CHỌN TRƯỜNG THPT */}
         {/* ========================================================= */}
         {currentStep === 1 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 sm:p-8 space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-8 space-y-5 sm:space-y-6">
             
             {/* Header: Greeting & Title as requested */}
             <div className="space-y-1.5">
@@ -1861,19 +1862,19 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
 
             {/* Big Search Bar with Magnifying Glass */}
             <div className="relative w-full">
-              <Search className="w-5 h-5 text-slate-600 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-5 h-5 text-slate-600 absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Nhập tên trường THPT của bạn..."
                 value={schoolSearchQuery}
                 onChange={(e) => setSchoolSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-10 py-3.5 text-sm sm:text-base bg-slate-50/70 hover:bg-white border border-slate-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-600/30 focus:border-blue-600 text-slate-950 font-medium placeholder:text-slate-600 transition-all shadow-2xs"
+                className="w-full min-h-[46px] pl-11 sm:pl-12 pr-11 py-3 text-base bg-slate-50/70 hover:bg-white border border-slate-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-600/30 focus:border-blue-600 text-slate-950 font-medium placeholder:text-slate-600 transition-all shadow-2xs"
               />
               {schoolSearchQuery && (
                 <button
                   type="button"
                   onClick={() => setSchoolSearchQuery('')}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-900 p-1 text-sm font-bold cursor-pointer"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-600 hover:text-slate-900 rounded-lg text-sm font-bold cursor-pointer"
                   aria-label="Xóa tìm kiếm"
                 >
                   ✕
@@ -2126,13 +2127,13 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
             )}
 
             {/* Step 1 Navigation Controls: 'Quay lại' & 'Tiếp tục' */}
-            <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 pt-4 border-t border-slate-200">
               <button
                 type="button"
                 onClick={onNavigateHome}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
               >
-                <ArrowLeft className="w-4 h-4" />
+                <ArrowLeft className="w-4 h-4 shrink-0" />
                 <span>Quay lại trang chủ</span>
               </button>
 
@@ -2140,14 +2141,14 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 type="button"
                 disabled={!currentSelectedTruong}
                 onClick={() => onStepChange(2)}
-                className={`inline-flex items-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all shadow-xs ${
+                className={`w-full sm:w-auto min-h-[46px] inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold rounded-xl transition-all shadow-xs ${
                   currentSelectedTruong
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer shadow-blue-600/25 active:scale-[0.99]'
+                    ? 'bg-[#1565C0] hover:bg-blue-800 text-white cursor-pointer shadow-blue-600/25 active:scale-[0.99]'
                     : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                 }`}
               >
                 <span>Tiếp tục (Khám phá Holland)</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4 shrink-0" />
               </button>
             </div>
 
@@ -2158,7 +2159,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
         {/* BƯỚC 2: KHÁM PHÁ HOLLAND RIASEC (108 CÂU HỎI TỪ SHEET HOLLAND_CAU_HOI) */}
         {/* ========================================================= */}
         {currentStep === 2 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 sm:p-8 space-y-8">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-8 space-y-6 sm:space-y-8">
             
             {/* Header: Title */}
             <div className="space-y-1.5">
@@ -2312,13 +2313,13 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 </div>
 
                 {/* Nút bắt đầu khám phá */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200">
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 pt-4 border-t border-slate-200">
                   <button
                     type="button"
                     onClick={() => onStepChange(1)}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                    className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
                   >
-                    <ArrowLeft className="w-4 h-4" />
+                    <ArrowLeft className="w-4 h-4 shrink-0" />
                     <span>Quay lại Bước 1 (Chọn trường THPT)</span>
                   </button>
 
@@ -2331,10 +2332,10 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                       setHollandStep('test');
                       setHollandGroupIndex(0);
                     }}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-600/20 active:scale-[0.99] transition-all cursor-pointer"
+                    className="w-full sm:w-auto min-h-[46px] inline-flex items-center justify-center gap-2 px-6 sm:px-7 py-3 text-sm font-bold text-white bg-[#1565C0] hover:bg-blue-800 rounded-xl shadow-md shadow-blue-600/20 active:scale-[0.99] transition-all cursor-pointer"
                   >
                     <span>Bắt đầu tích chọn sở thích (108 câu)</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4 shrink-0" />
                   </button>
                 </div>
               </div>
@@ -2396,13 +2397,13 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                           </div>
 
                           {/* Nút chọn nhanh cả cột */}
-                          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/60 text-[11px]">
-                            <span className="text-slate-500 text-[10px] font-medium">Thao tác nhanh cột:</span>
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 text-xs">
+                            <span className="text-slate-600 text-[11px] font-medium">Thao tác nhanh cột:</span>
                             <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => handleSelectAllInColumn(qList)}
-                                className="px-2.5 py-0.5 font-bold text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 rounded-md shadow-2xs cursor-pointer transition-colors text-[11px]"
+                                className="min-h-[36px] px-3 py-1.5 font-bold text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 rounded-lg shadow-2xs cursor-pointer transition-colors text-xs"
                                 title="Tick chọn tất cả câu trong cột này"
                               >
                                 Chọn tất cả
@@ -2410,7 +2411,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                               <button
                                 type="button"
                                 onClick={() => handleDeselectAllInColumn(qList)}
-                                className="px-2.5 py-0.5 font-medium text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-md shadow-2xs cursor-pointer transition-colors text-[11px]"
+                                className="min-h-[36px] px-3 py-1.5 font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg shadow-2xs cursor-pointer transition-colors text-xs"
                                 title="Bỏ tick tất cả câu trong cột này"
                               >
                                 Bỏ chọn
@@ -2429,7 +2430,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                                 <div
                                   key={q.id}
                                   onClick={() => handleToggleQuestionTick(q.id)}
-                                  className={`p-3 sm:p-3.5 rounded-xl border transition-all duration-150 cursor-pointer select-none flex items-start gap-3 ${
+                                  className={`min-h-[48px] p-3 sm:p-3.5 rounded-xl border transition-all duration-150 cursor-pointer select-none flex items-start gap-3 ${
                                     isTicked
                                       ? 'bg-blue-50/90 border-blue-500 shadow-xs ring-1 ring-blue-500/20 text-blue-950'
                                       : 'bg-white border-slate-200 hover:bg-slate-50/80 hover:border-slate-300 text-slate-800'
@@ -2437,7 +2438,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                                 >
                                   {/* Ô checkbox tích chọn: to, rõ ràng, dễ nhấn trên điện thoại và máy tính */}
                                   <div
-                                    className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all duration-150 ${
+                                    className={`w-6 h-6 sm:w-5 sm:h-5 rounded-md border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all duration-150 ${
                                       isTicked
                                         ? 'bg-blue-600 border-blue-600 text-white shadow-2xs'
                                         : 'bg-white border-slate-300 hover:border-blue-400'
@@ -2485,7 +2486,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                   };
 
                   return (
-                    <div className="bg-[#f8faff] sm:bg-slate-50/70 p-4 sm:p-7 rounded-3xl border border-slate-200/90 shadow-2xs space-y-6">
+                    <div className="bg-[#f8faff] sm:bg-slate-50/70 p-3 sm:p-7 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-2xs space-y-5 sm:space-y-6">
                       
                       {/* 1. Thanh tiến trình & Đếm số câu đã chọn trên toàn bộ 108 câu */}
                       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3.5">
@@ -2574,18 +2575,18 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                           </div>
 
                           {/* Nút thao tác nhanh cả 18 câu trong nhóm */}
-                          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:self-auto shrink-0">
                             <button
                               type="button"
                               onClick={() => handleSelectAllInGroup(currentGroupKey)}
-                              className="px-3 py-1.5 text-xs sm:text-[13px] font-bold text-blue-800 bg-blue-50 border border-blue-300 rounded-lg hover:bg-blue-100 cursor-pointer transition-colors"
+                              className="flex-1 sm:flex-none min-h-[40px] px-3 py-2 text-xs sm:text-[13px] font-bold text-blue-800 bg-blue-50 border border-blue-300 rounded-xl hover:bg-blue-100 cursor-pointer transition-colors text-center"
                             >
                               Chọn tất cả (18 câu)
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeselectAllInGroup(currentGroupKey)}
-                              className="px-3 py-1.5 text-xs sm:text-[13px] font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
+                              className="flex-1 sm:flex-none min-h-[40px] px-3 py-2 text-xs sm:text-[13px] font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl hover:bg-slate-100 cursor-pointer transition-colors text-center"
                             >
                               Bỏ chọn tất cả
                             </button>
@@ -2648,12 +2649,12 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                       )}
 
                       {/* 4. Thanh điều hướng: Nhóm trước và Nhóm tiếp theo / Hoàn thành */}
-                      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
+                        <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
                           <button
                             type="button"
                             onClick={() => setHollandStep('intro')}
-                            className="px-3.5 py-2.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors"
+                            className="min-h-[44px] px-3 py-2.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors text-center"
                           >
                             Về giới thiệu
                           </button>
@@ -2661,13 +2662,13 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                             type="button"
                             disabled={hollandGroupIndex <= 0}
                             onClick={handlePrevGroup}
-                            className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-xl border transition-colors ${
+                            className={`min-h-[44px] inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold rounded-xl border transition-colors ${
                               hollandGroupIndex <= 0
                                 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                                 : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 cursor-pointer'
                             }`}
                           >
-                            <ArrowLeft className="w-3.5 h-3.5" />
+                            <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
                             <span>Nhóm trước</span>
                           </button>
                         </div>
@@ -2677,10 +2678,10 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                             <button
                               type="button"
                               onClick={handleNextGroup}
-                              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-6 py-2.5 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs cursor-pointer active:scale-[0.99] transition-all"
+                              className="w-full sm:w-auto min-h-[46px] inline-flex items-center justify-center gap-1.5 px-5 sm:px-6 py-2.5 text-xs sm:text-sm font-bold text-white bg-[#1565C0] hover:bg-blue-800 rounded-xl shadow-xs cursor-pointer active:scale-[0.99] transition-all"
                             >
                               <span>Tiếp theo: Nhóm {RIASEC_INFO_MAP[RIASEC_ORDER[hollandGroupIndex + 1]].vietnameseName.split('/')[0].trim()}</span>
-                              <ArrowRight className="w-4 h-4" />
+                              <ArrowRight className="w-4 h-4 shrink-0" />
                             </button>
                           ) : (
                             <button
@@ -2689,9 +2690,9 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                                 setHollandStep('result');
                                 setTimeout(scrollToTestTop, 40);
                               }}
-                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3 text-xs sm:text-sm font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md shadow-emerald-600/20 cursor-pointer transition-all active:scale-[0.99]"
+                              className="w-full sm:w-auto min-h-[46px] inline-flex items-center justify-center gap-2 px-5 sm:px-7 py-3 text-xs sm:text-sm font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md shadow-emerald-600/20 cursor-pointer transition-all active:scale-[0.99]"
                             >
-                              <CheckCheck className="w-4 h-4" />
+                              <CheckCheck className="w-4 h-4 shrink-0" />
                               <span>Hoàn thành &amp; Xem kết quả phân tích RIASEC</span>
                             </button>
                           )}
@@ -2948,8 +2949,8 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 </div>
 
                 {/* 6. Điều hướng sau khi hoàn thành khảo sát Bước 2 */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200">
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 pt-4 border-t border-slate-200">
+                  <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
                     <button
                       type="button"
                       onClick={() => {
@@ -2958,7 +2959,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                         setHollandStep('test');
                         setTimeout(scrollToTestTop, 40);
                       }}
-                      className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                      className="min-h-[44px] px-3 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer text-center"
                     >
                       Làm lại khảo sát
                     </button>
@@ -2969,19 +2970,19 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                         setHollandStep('test');
                         setTimeout(scrollToTestTop, 40);
                       }}
-                      className="px-3.5 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
+                      className="min-h-[44px] px-3 py-2 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer text-center"
                     >
-                      Xem lại các câu đã chọn
+                      Xem lại câu chọn
                     </button>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => onStepChange(3)}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-extrabold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-600/20 active:scale-[0.99] transition-all cursor-pointer"
+                    className="w-full sm:w-auto min-h-[46px] inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-extrabold text-white bg-[#1565C0] hover:bg-blue-800 rounded-xl shadow-md shadow-blue-600/20 active:scale-[0.99] transition-all cursor-pointer"
                   >
                     <span>Tiếp tục: Chọn nguyện vọng đại học</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4 shrink-0" />
                   </button>
                 </div>
 
@@ -2995,7 +2996,7 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
         {/* CHỌN NGUYỆN VỌNG ĐẠI HỌC (1 ĐẾN 3 NGUYỆN VỌNG ĐỘC LẬP) */}
         {/* ========================================================= */}
         {currentStep === 3 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-7 space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-3.5 sm:p-7 space-y-5 sm:space-y-6">
             
             {/* Tiêu đề */}
             <div className="p-5 bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white rounded-2xl shadow-sm space-y-2">
@@ -3161,20 +3162,21 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                       </div>
 
                       {/* Nút điều khiển thứ tự và xóa */}
-                      <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                      <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
                         {/* Di chuyển lên */}
                         <button
                           type="button"
                           disabled={index === 0}
                           onClick={() => handleMoveWishUp(index)}
-                          className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
+                          className={`min-h-[40px] min-w-[40px] px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
                             index === 0
                               ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
                               : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-50 cursor-pointer shadow-2xs'
                           }`}
                           title="Di chuyển nguyện vọng lên trên"
+                          aria-label="Di chuyển nguyện vọng lên trên"
                         >
-                          <ArrowUp className="w-3.5 h-3.5" />
+                          <ArrowUp className="w-4 h-4" />
                           <span className="text-xs hidden sm:inline">Lên</span>
                         </button>
 
@@ -3183,14 +3185,15 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                           type="button"
                           disabled={index === universityWishes.length - 1}
                           onClick={() => handleMoveWishDown(index)}
-                          className={`p-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors ${
+                          className={`min-h-[40px] min-w-[40px] px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
                             index === universityWishes.length - 1
                               ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
                               : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-50 cursor-pointer shadow-2xs'
                           }`}
                           title="Di chuyển nguyện vọng xuống dưới"
+                          aria-label="Di chuyển nguyện vọng xuống dưới"
                         >
-                          <ArrowDown className="w-3.5 h-3.5" />
+                          <ArrowDown className="w-4 h-4" />
                           <span className="text-xs hidden sm:inline">Xuống</span>
                         </button>
 
@@ -3199,10 +3202,11 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                           <button
                             type="button"
                             onClick={() => handleDeleteWish(index)}
-                            className="p-1.5 rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-700 font-semibold transition-colors cursor-pointer shadow-2xs flex items-center gap-1 text-xs"
+                            className="min-h-[40px] min-w-[40px] px-2.5 py-1.5 rounded-xl border border-red-200 bg-white hover:bg-red-50 text-red-700 font-semibold transition-colors cursor-pointer shadow-2xs flex items-center justify-center gap-1 text-xs"
                             title="Xóa nguyện vọng này"
+                            aria-label="Xóa nguyện vọng này"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                             <span className="text-xs hidden sm:inline">Xóa</span>
                           </button>
                         )}
@@ -3225,8 +3229,11 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                           <select
                             id={`select-province-${wish.id}`}
                             value={wish.maTinh}
-                            onChange={(e) => handleChangeProvince(index, e.target.value)}
-                            className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-bold text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-600/30"
+                            onChange={(e) => {
+                              setWish1ValidationError('');
+                              handleChangeProvince(index, e.target.value);
+                            }}
+                            className="w-full min-h-[46px] px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-base sm:text-sm font-bold text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-600/30"
                           >
                             <option value="">-- Chọn Tỉnh / Thành phố --</option>
                             {tinhThanhList.length > 0 ? (
@@ -3259,11 +3266,14 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                             id={`select-university-${wish.id}`}
                             disabled={!wish.maTinh}
                             value={wish.maTruongDH}
-                            onChange={(e) => handleChangeUniversity(index, e.target.value)}
-                            className={`w-full px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600/30 ${
+                            onChange={(e) => {
+                              setWish1ValidationError('');
+                              handleChangeUniversity(index, e.target.value);
+                            }}
+                            className={`w-full min-h-[46px] px-3 py-2.5 rounded-xl text-base sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600/30 ${
                               !wish.maTinh
-                                ? 'bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed'
-                                : 'bg-white border-slate-300 text-slate-950'
+                                ? 'bg-slate-100 border border-slate-200 text-slate-600 cursor-not-allowed'
+                                : 'bg-white border border-slate-300 text-slate-950'
                             }`}
                           >
                             <option value="">
@@ -3299,11 +3309,14 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                             id={`select-major-${wish.id}`}
                             disabled={!wish.maTruongDH || schoolMajors.length === 0}
                             value={wish.maChuongTrinh}
-                            onChange={(e) => handleChangeMajor(index, e.target.value)}
-                            className={`w-full px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600/30 ${
+                            onChange={(e) => {
+                              setWish1ValidationError('');
+                              handleChangeMajor(index, e.target.value);
+                            }}
+                            className={`w-full min-h-[46px] px-3 py-2.5 rounded-xl text-base sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600/30 ${
                               !wish.maTruongDH || schoolMajors.length === 0
-                                ? 'bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed'
-                                : 'bg-white border-slate-300 text-slate-950'
+                                ? 'bg-slate-100 border border-slate-200 text-slate-600 cursor-not-allowed'
+                                : 'bg-white border border-slate-300 text-slate-950'
                             }`}
                           >
                             <option value="">
@@ -3471,14 +3484,25 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
               </div>
             </div>
 
+            {/* Thông báo lỗi nội tuyến khi chưa hoàn tất Nguyện vọng 1 (thay thế window.alert) */}
+            {wish1ValidationError && (
+              <div
+                role="alert"
+                className="p-3.5 bg-red-50 border border-red-200 text-red-900 rounded-xl text-xs sm:text-sm flex items-start gap-2.5 shadow-2xs"
+              >
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <p className="font-semibold leading-relaxed">{wish1ValidationError}</p>
+              </div>
+            )}
+
             {/* Điều hướng Bước 3 */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 pt-4 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => onStepChange(2)}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
+                <ArrowLeft className="w-4 h-4 shrink-0" />
                 <span>Quay lại Khám phá Holland (Bước 2)</span>
               </button>
 
@@ -3487,16 +3511,19 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                 onClick={() => {
                   const hasFilledWish1 = universityWishes[0]?.tenNganh && universityWishes[0]?.maTruongDH;
                   if (!hasFilledWish1) {
-                    alert('Vui lòng hoàn thành ít nhất Nguyện vọng 1 (chọn Tỉnh, Trường và Ngành đào tạo) trước khi tiếp tục!');
+                    setWish1ValidationError(
+                      'Vui lòng hoàn thành ít nhất Nguyện vọng 1 (chọn Tỉnh/Thành phố, Trường Đại học và Ngành đào tạo) trước khi tiếp tục!'
+                    );
                     return;
                   }
+                  setWish1ValidationError('');
                   triggerAutoSaveConsultation();
                   onStepChange(4);
                 }}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3 text-xs sm:text-sm font-extrabold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-md shadow-blue-600/20 active:scale-[0.99] cursor-pointer"
+                className="w-full sm:w-auto min-h-[46px] inline-flex items-center justify-center gap-2 px-6 sm:px-7 py-3 text-sm font-extrabold text-white bg-[#1565C0] hover:bg-blue-800 rounded-xl transition-all shadow-md shadow-blue-600/20 active:scale-[0.99] cursor-pointer"
               >
                 <span>Xem kết quả tư vấn tổ hợp (Bước 4)</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4 shrink-0" />
               </button>
             </div>
 
@@ -3963,18 +3990,18 @@ EduGuide AI – Hướng nghiệp thông minh cho học sinh THPT`;
                       {/* Chi tiết 2 khối: Tổ hợp có trong dữ liệu & Tổ hợp đáp ứng đầy đủ */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs sm:text-[13px]">
                         {/* Cột 1: Các tổ hợp xét tuyển có trong dữ liệu */}
-                        <div className="p-3.5 bg-white rounded-xl border border-slate-300 space-y-2">
+                        <div className="p-3 sm:p-3.5 bg-white rounded-xl border border-slate-300 space-y-2 min-w-0">
                           <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider block">
                             Các tổ hợp trong CSDL ({wb.allCombos.length} tổ hợp):
                           </span>
                           {wb.allCombos.length > 0 ? (
                             <div className="space-y-2">
                               {wb.allCombos.map((c, i) => (
-                                <div key={i} className="text-xs text-slate-900 flex items-start justify-between gap-2">
+                                <div key={i} className="text-xs text-slate-900 flex flex-wrap sm:flex-nowrap items-start justify-between gap-1.5 sm:gap-2 pb-1.5 last:pb-0 border-b last:border-b-0 border-slate-100">
                                   <span className="font-extrabold text-blue-950 font-mono bg-blue-50 px-2 py-0.5 rounded border border-blue-300 shrink-0">
                                     {c.code}
                                   </span>
-                                  <span className="text-slate-800 font-semibold text-right leading-snug">
+                                  <span className="text-slate-800 font-semibold text-left sm:text-right leading-snug break-words min-w-0">
                                     {c.rawSubjects.join(', ')}
                                   </span>
                                 </div>
